@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Yukara POS",
+  "description": "A premium, multi-tenant POS and inventory SaaS platform for beer, wine, and liquor stores, featuring age verification, case-to-bottle breakdown, wine mix-and-match discounts, and barcode autofill via Open Food Facts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
