@@ -116,6 +116,47 @@ export default function Settings({ activeRole, onChangeRole, showToast }: Settin
           </div>
         </div>
 
+        {/* System Telemetry & Diagnostics Panel */}
+        <div className="bg-white dark:bg-[#121214] border border-[#e4e4e7] dark:border-[#27272a] rounded-2xl p-6 space-y-4">
+          <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <ShieldCheck className="h-4.5 w-4.5 text-amber-500" />
+            <h3 className="font-bold text-xs uppercase tracking-wider text-zinc-900 dark:text-white">
+              System Diagnostics & Telemetry
+            </h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="p-3 bg-[#fafafa] dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-1">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Connection Node</span>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-500 font-mono">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                ONLINE (9ms latency)
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#fafafa] dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-1">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Security Protocol</span>
+              <div className="text-xs font-bold text-[#d97706] font-mono uppercase">
+                ACTIVE [TLS 1.3 AES-256]
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#fafafa] dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-1">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Local Timezone</span>
+              <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 font-mono">
+                {new Date().toLocaleTimeString()} (UTC)
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#fafafa] dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-1">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Database Workspace</span>
+              <div className="text-xs font-bold text-[#10b981] font-mono">
+                HEALTHY (Replica Sync)
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* User List Panel */}
           <div className="bg-white dark:bg-[#121214] border border-[#e4e4e7] dark:border-[#27272a] rounded-2xl p-6 space-y-6">

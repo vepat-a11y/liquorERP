@@ -10,7 +10,6 @@ import History from './components/History';
 import Discounts from './components/Discounts';
 import Purchases from './components/Purchases';
 import Marketing from './components/Marketing';
-import Accounting from './components/Accounting';
 import PrintMaterial from './components/PrintMaterial';
 import Integrations from './components/Integrations';
 import Settings from './components/Settings';
@@ -56,9 +55,9 @@ const INITIAL_DISCOUNT_RULES: DiscountRule[] = [
 
 export default function App() {
   // Theme & Layout state
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [activeTab, setActiveTab] = useState<
-    'register' | 'inventory' | 'history' | 'discounts' | 'purchases' | 'marketing' | 'accounting' | 'print' | 'integrations' | 'settings' | 'website'
+    'register' | 'inventory' | 'history' | 'discounts' | 'purchases' | 'marketing' | 'print' | 'integrations' | 'settings' | 'website'
   >('register');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [activeRole, setActiveRole] = useState<'Admin' | 'Manager' | 'Cashier'>('Admin');
@@ -229,15 +228,30 @@ export default function App() {
     }
   }, [activeTenantId, tenants]);
 
-  // Sync index.html root body dark/light class
+  // Sync index.html root body dark/light class with support for system mode
   useEffect(() => {
     const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-      root.style.backgroundColor = '#121212'; // dark ink
+    const applyTheme = (t: 'light' | 'dark') => {
+      if (t === 'dark') {
+        root.classList.add('dark');
+        root.style.backgroundColor = '#121212'; // dark ink
+      } else {
+        root.classList.remove('dark');
+        root.style.backgroundColor = '#f8f7f4'; // warm bg
+      }
+    };
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      applyTheme(mediaQuery.matches ? 'dark' : 'light');
+
+      const listener = (e: MediaQueryListEvent) => {
+        applyTheme(e.matches ? 'dark' : 'light');
+      };
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
     } else {
-      root.classList.remove('dark');
-      root.style.backgroundColor = '#f8f7f4'; // warm bg
+      applyTheme(theme);
     }
   }, [theme]);
 
@@ -252,28 +266,6 @@ export default function App() {
   return (
     <div className="h-screen w-screen bg-[#f8f7f4] dark:bg-[#121212] text-[#1a1a1a] dark:text-[#f8f7f4] font-sans select-none flex flex-col overflow-hidden transition-colors duration-300">
       
-      {/* SYSTEM TOP */}
-      <div className="flex justify-between items-center px-6 py-4 border-b-2 border-[#1a1a1a] dark:border-[#f8f7f4] bg-white dark:bg-[#1a1a1a] select-none shrink-0">
-        <div className="font-mono font-bold uppercase tracking-wider text-xs sm:text-sm md:text-base flex items-center gap-3">
-          <span>AuraPOS // CORE_SYSTEM</span>
-          {activeTenant && (
-            <span className="text-[10px] md:text-xs text-amber-600 dark:text-amber-400 border border-[#d97706]/40 px-2 py-0.5 rounded font-normal bg-amber-500/10 uppercase tracking-wider">
-              {activeTenant.name}
-            </span>
-          )}
-        </div>
-        <div className="font-mono text-[9px] sm:text-[10px] md:text-xs uppercase tracking-widest flex items-center gap-4 sm:gap-6">
-          <span className="hidden sm:inline text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            CONNECTED
-          </span>
-          <span className="text-[#d97706] dark:text-amber-400 font-bold">[SECURITY: ACTIVE]</span>
-          <span className="tabular-nums font-medium text-zinc-500 dark:text-zinc-400">
-            {currentTime}
-          </span>
-        </div>
-      </div>
-
       <div className="flex-1 flex flex-row overflow-hidden">
         
         {/* 1. LEFT FIXED SIDEBAR */}
@@ -282,16 +274,19 @@ export default function App() {
           {/* Logo & Collapse Button */}
           <div className="flex items-center justify-between border-b border-[#1a1a1a]/10 dark:border-[#f8f7f4]/10 pb-3">
             <div className="flex items-center gap-2">
+              <div className="h-8 w-8 bg-[#1a1a1a] dark:bg-white text-white dark:text-[#1a1a1a] rounded flex items-center justify-center font-bold text-sm tracking-tighter shadow-sm shrink-0">
+                M
+              </div>
               {!isSidebarCollapsed && (
-                <span className="font-mono text-xs font-bold uppercase tracking-widest text-[#d97706] dark:text-amber-400">
-                  ACCESS POINTS
+                <span className="font-sans font-black text-sm uppercase tracking-widest text-zinc-900 dark:text-white">
+                  MODULE<span className="text-[#d97706] font-normal font-mono">.</span>
                 </span>
               )}
             </div>
             
             <button
               onClick={() => setIsSidebarCollapsed(prev => !prev)}
-              className="p-1.5 rounded border border-[#1a1a1a]/10 dark:border-[#f8f7f4]/10 hover:border-[#1a1a1a] dark:hover:border-white text-zinc-400 hover:text-[#1a1a1a] dark:hover:text-white transition-all cursor-pointer"
+              className="p-1.5 rounded border border-[#1a1a1a]/10 dark:border-[#f8f7f4]/10 hover:border-[#1a1a1a] dark:hover:border-white text-zinc-400 hover:text-[#1a1a1a] dark:hover:text-white transition-all cursor-pointer shrink-0"
               title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
               <Menu className="h-4 w-4" />
@@ -315,13 +310,13 @@ export default function App() {
                 }`}
               >
                 <ShoppingBag className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">01. REGISTER</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">REGISTER</span>}
               </button>
 
               {/* Products */}
               <button
                 onClick={() => setActiveTab('inventory')}
-                title="02. PRODUCT_CATALOG"
+                title="PRODUCT CATALOG"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -331,13 +326,13 @@ export default function App() {
                 }`}
               >
                 <Package className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">02. PRODUCT_CATALOG</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRODUCTS</span>}
               </button>
 
               {/* Reports */}
               <button
                 onClick={() => setActiveTab('history')}
-                title="03. ANALYTICS_DB"
+                title="ANALYTICS & DATABASE"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -347,13 +342,13 @@ export default function App() {
                 }`}
               >
                 <FileText className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">03. ANALYTICS_DB</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">TRANSACTIONS</span>}
               </button>
 
               {/* Discounts */}
               <button
                 onClick={() => setActiveTab('discounts')}
-                title="04. OFFERS_CAMPAIGNS"
+                title="OFFERS & CAMPAIGNS"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -363,13 +358,13 @@ export default function App() {
                 }`}
               >
                 <Percent className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">04. OFFERS_CAMPAIGNS</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PROMOTIONS</span>}
               </button>
 
               {/* Purchases */}
               <button
                 onClick={() => setActiveTab('purchases')}
-                title="05. LOGISTICS_HUB"
+                title="LOGISTICS & ORDERS"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -379,13 +374,13 @@ export default function App() {
                 }`}
               >
                 <Truck className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">05. LOGISTICS_HUB</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PURCHASES</span>}
               </button>
 
               {/* Marketing */}
               <button
                 onClick={() => setActiveTab('marketing')}
-                title="06. PUBLIC_MARKETING"
+                title="PUBLIC MARKETING"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -395,29 +390,13 @@ export default function App() {
                 }`}
               >
                 <Megaphone className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">06. PUBLIC_MARKETING</span>}
-              </button>
-
-              {/* Accounting */}
-              <button
-                onClick={() => setActiveTab('accounting')}
-                title="07. FINANCE_AUDIT"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'accounting' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <DollarSign className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">07. FINANCE_AUDIT</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">MARKETING</span>}
               </button>
 
               {/* Print Material */}
               <button
                 onClick={() => setActiveTab('print')}
-                title="08. PRINT_CORE"
+                title="PRINT DESIGNER"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -427,13 +406,13 @@ export default function App() {
                 }`}
               >
                 <Printer className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">08. PRINT_CORE</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRINTING</span>}
               </button>
 
               {/* Integrations */}
               <button
                 onClick={() => setActiveTab('integrations')}
-                title="09. CLOUD_INTEGRATIONS"
+                title="CLOUD INTEGRATIONS"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -443,13 +422,13 @@ export default function App() {
                 }`}
               >
                 <Globe className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">09. CLOUD_INTEGRATIONS</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">INTEGRATIONS</span>}
               </button>
 
               {/* Online Store Website Builder */}
               <button
                 onClick={() => setActiveTab('website')}
-                title="10. ONLINE_PORTAL"
+                title="ONLINE STORE"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -459,13 +438,13 @@ export default function App() {
                 }`}
               >
                 <Laptop className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">10. ONLINE_PORTAL</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">ONLINE STORE</span>}
               </button>
 
               {/* Settings & User Rights */}
               <button
                 onClick={() => setActiveTab('settings')}
-                title="11. SYSTEM_SETTINGS"
+                title="SYSTEM SETTINGS"
                 className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
                   isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
                 } ${
@@ -475,7 +454,7 @@ export default function App() {
                 }`}
               >
                 <Users className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-mono text-[11px] uppercase tracking-wider">11. SYSTEM_SETTINGS</span>}
+                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">SETTINGS</span>}
               </button>
 
             </nav>
@@ -499,14 +478,29 @@ export default function App() {
           {/* Theme Toggler & Date */}
           <div className={`flex items-center ${isSidebarCollapsed ? 'flex-col gap-3 justify-center' : 'justify-between'} pt-1`}>
             <button
-              onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
-              className="p-2 rounded-xl border border-[#e4e4e7] dark:border-[#27272a] bg-white dark:bg-[#18181b] hover:bg-zinc-100 dark:hover:bg-zinc-800 text-[#71717a] dark:text-[#a1a1aa] transition-all cursor-pointer flex items-center justify-center"
-              title="Toggle Theme"
+              onClick={() => setTheme(prev => prev === 'light' ? 'dark' : prev === 'dark' ? 'system' : 'light')}
+              className="p-2 rounded-xl border border-[#e4e4e7] dark:border-[#27272a] bg-white dark:bg-[#18181b] hover:bg-zinc-100 dark:hover:bg-zinc-800 text-[#71717a] dark:text-[#a1a1aa] transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold w-full"
+              title="Toggle Theme: Light / Dark / System"
             >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === 'dark' ? (
+                <>
+                  <Moon className="h-3.5 w-3.5" />
+                  {!isSidebarCollapsed && <span className="text-[10px] uppercase font-mono tracking-wider">Dark</span>}
+                </>
+              ) : theme === 'light' ? (
+                <>
+                  <Sun className="h-3.5 w-3.5" />
+                  {!isSidebarCollapsed && <span className="text-[10px] uppercase font-mono tracking-wider">Light</span>}
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 text-amber-500 animate-spin-slow" />
+                  {!isSidebarCollapsed && <span className="text-[10px] uppercase font-mono tracking-wider text-amber-500">System</span>}
+                </>
+              )}
             </button>
             {!isSidebarCollapsed && (
-              <span className="text-[#71717a] dark:text-[#a1a1aa] font-mono text-[11px] tabular-nums">2026-06-26</span>
+              <span className="text-[#71717a] dark:text-[#a1a1aa] font-mono text-[10px] tabular-nums whitespace-nowrap pl-2">2026-06-26</span>
             )}
           </div>
         </div>
@@ -533,7 +527,7 @@ export default function App() {
             <div className="flex-1 flex overflow-hidden">
               
               {/* Cashier Guard for restricted views */}
-              {activeRole === 'Cashier' && ['inventory', 'purchases', 'accounting', 'settings'].includes(activeTab) ? (
+              {activeRole === 'Cashier' && ['inventory', 'purchases', 'settings'].includes(activeTab) ? (
                 <div className="flex-1 flex flex-col items-center justify-center bg-white dark:bg-[#09090b] text-center p-8 space-y-4">
                   <div className="h-16 w-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center">
                     <Lock className="h-8 w-8 stroke-[1.5]" />
@@ -615,14 +609,6 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === 'accounting' && (
-                    <Accounting
-                      transactions={transactions}
-                      products={products}
-                      showToast={showToast}
-                    />
-                  )}
-
                   {activeTab === 'print' && (
                     <PrintMaterial
                       products={products}
@@ -634,6 +620,7 @@ export default function App() {
                     <Integrations
                       tenantId={activeTenantId}
                       products={products}
+                      transactions={transactions}
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
                       incomingOrders={incomingOrders}
