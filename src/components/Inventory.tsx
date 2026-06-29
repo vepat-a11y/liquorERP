@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   Plus, QrCode, Sparkles, RefreshCw, CheckCircle2, Package, Search, Wine, Lock, 
   ShieldAlert, FileText, Check, Save, MessageSquare, Clock, Calendar, User, 
-  ShoppingBag, Download, Upload, X, Eye, HelpCircle, Archive, Trash2, Layers
+  ShoppingBag, Download, Upload, X, Eye, HelpCircle, Archive, Trash2, Layers,
+  Settings
 } from 'lucide-react';
 import { Product } from '../types';
 
@@ -32,10 +33,14 @@ export default function Inventory({
   // Modal Toggles
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isGearMenuOpen, setIsGearMenuOpen] = useState(false);
 
-  // Search & Tab States
+  // Search, Filter & Sorter States (Replaces old tabs and search layout)
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategoryTab, setActiveCategoryTab] = useState<'All' | 'Liquor' | 'Wine' | 'Beer' | 'Extras'>('All');
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<'All' | 'Liquor' | 'Wine' | 'Beer' | 'Extras'>('All');
+  const [activeStockFilter, setActiveStockFilter] = useState<'All' | 'in_stock' | 'low_stock' | 'out_of_stock'>('All');
+  const [activeAgeFilter, setActiveAgeFilter] = useState<'All' | 'restricted' | 'unrestricted'>('All');
+  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc'>('name_asc');
 
   // Barcode Lookup States inside Add Modal
   const [lookupBarcode, setLookupBarcode] = useState('');
@@ -441,141 +446,217 @@ export default function Inventory({
     }
   };
 
-  // Filter list by search query AND active tab
-  const filteredList = products.filter(p => {
-    const query = searchQuery.trim().toLowerCase();
-    const matchesSearch = !query || 
-                          p.name.toLowerCase().includes(query) ||
-                          (p.barcode && p.barcode.includes(query)) ||
-                          (p.category && p.category.toLowerCase().includes(query)) ||
-                          (p.vendor && p.vendor.toLowerCase().includes(query)) ||
-                          (p.distributor_sku && p.distributor_sku.toLowerCase().includes(query));
-    
-    const matchesTab = activeCategoryTab === 'All' || p.category === activeCategoryTab;
+  // Filter & Sort list based on the brand new unified search bar & filter controls
+  const filteredList = products
+    .filter(p => {
+      const query = searchQuery.trim().toLowerCase();
+      const matchesSearch = !query || 
+                            p.name.toLowerCase().includes(query) ||
+                            (p.barcode && p.barcode.includes(query)) ||
+                            (p.category && p.category.toLowerCase().includes(query)) ||
+                            (p.vendor && p.vendor.toLowerCase().includes(query)) ||
+                            (p.distributor_sku && p.distributor_sku.toLowerCase().includes(query));
+      
+      const matchesCategory = activeCategoryFilter === 'All' || p.category === activeCategoryFilter;
+      
+      const stockStatus = p.inventory_bottles === 0 
+        ? 'out_of_stock' 
+        : (p.inventory_bottles < p.bottles_per_case ? 'low_stock' : 'in_stock');
+        
+      const matchesStock = activeStockFilter === 'All' || 
+                           (activeStockFilter === 'out_of_stock' && stockStatus === 'out_of_stock') ||
+                           (activeStockFilter === 'low_stock' && stockStatus === 'low_stock') ||
+                           (activeStockFilter === 'in_stock' && stockStatus === 'in_stock');
+                           
+      const matchesAge = activeAgeFilter === 'All' ||
+                         (activeAgeFilter === 'restricted' && p.age_restricted) ||
+                         (activeAgeFilter === 'unrestricted' && !p.age_restricted);
 
-    return matchesSearch && matchesTab;
-  });
+      return matchesSearch && matchesCategory && matchesStock && matchesAge;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
+      if (sortBy === 'price_asc') return a.price_per_bottle - b.price_per_bottle;
+      if (sortBy === 'price_desc') return b.price_per_bottle - a.price_per_bottle;
+      if (sortBy === 'stock_asc') return a.inventory_bottles - b.inventory_bottles;
+      if (sortBy === 'stock_desc') return b.inventory_bottles - a.inventory_bottles;
+      return 0;
+    });
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden h-full bg-[#f6f6f7] dark:bg-[#0c0c0e]">
       
-      {/* SHOPIFY-STYLE PAGE HEADER */}
-      <header className="px-8 py-6 bg-white dark:bg-[#111113] border-b border-zinc-200/80 dark:border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="font-mono text-[9px] uppercase tracking-widest font-black text-[#d97706] bg-[#d97706]/10 px-2 py-0.5 rounded">
-              Warehouse Catalog
-            </span>
-            <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            <span className="text-[10px] font-mono text-zinc-400 font-semibold uppercase">
-              {permissionLevel} Profile
-            </span>
+      {/* NEW COMPACT UNIFIED TOP UTILITY BAR (Matches Shopify/Odoo Settings setup) */}
+      <div className="p-4 bg-white dark:bg-[#111113] border-b border-zinc-200/80 dark:border-zinc-800 shrink-0 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.01)] z-30">
+        
+        {/* Left: Search Bar with advanced filter options embedded */}
+        <div className="flex-1 flex flex-wrap items-center gap-2.5">
+          {/* Text Search Input */}
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-400" />
+            <input
+              type="text"
+              placeholder="Search by title, SKU, brand, barcode..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-xl focus:border-[#d97706] focus:bg-white dark:focus:bg-zinc-950 focus:outline-none text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 transition-all shadow-inner"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <h1 className="font-serif italic font-medium text-3xl text-zinc-900 dark:text-[#f8f7f4] tracking-tight">
-            Products
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1.5 leading-normal max-w-2xl">
-            Configure spirits, fine wines, premium beers, bar stock merchandise, pricing schedules, and distributor compliance tags.
-          </p>
+
+          {/* Category Dropdown Filter */}
+          <select
+            value={activeCategoryFilter}
+            onChange={(e) => setActiveCategoryFilter(e.target.value as any)}
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#d97706] cursor-pointer"
+          >
+            <option value="All">All Categories</option>
+            <option value="Liquor">Liquor Shelf</option>
+            <option value="Wine">Wine Cellar</option>
+            <option value="Beer">Beer Cold Box</option>
+            <option value="Extras">Extras / Merchandise</option>
+          </select>
+
+          {/* Stock Level Filter */}
+          <select
+            value={activeStockFilter}
+            onChange={(e) => setActiveStockFilter(e.target.value as any)}
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#d97706] cursor-pointer"
+          >
+            <option value="All">All Stock Levels</option>
+            <option value="in_stock">In Stock (Good)</option>
+            <option value="low_stock">Low Stock Alerts</option>
+            <option value="out_of_stock">Out of Stock</option>
+          </select>
+
+          {/* Age Compliance Filter */}
+          <select
+            value={activeAgeFilter}
+            onChange={(e) => setActiveAgeFilter(e.target.value as any)}
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#d97706] cursor-pointer"
+          >
+            <option value="All">All Compliance</option>
+            <option value="restricted">🔞 21+ Verification Required</option>
+            <option value="unrestricted">Unrestricted General</option>
+          </select>
+
+          {/* Sort By Dropdown */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#d97706] cursor-pointer font-bold"
+          >
+            <option value="name_asc">Sort: Title (A-Z)</option>
+            <option value="name_desc">Sort: Title (Z-A)</option>
+            <option value="price_asc">Sort: Price (Low → High)</option>
+            <option value="price_desc">Sort: Price (High → Low)</option>
+            <option value="stock_asc">Sort: Stock (Low → High)</option>
+            <option value="stock_desc">Sort: Stock (High → Low)</option>
+          </select>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={handleExportProducts}
-            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-mono font-bold text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition shadow-sm cursor-pointer flex items-center gap-1.5"
-          >
-            <Download className="h-3.5 w-3.5 text-zinc-400" />
-            Export
-          </button>
+        {/* Right: Actions menu with Gear Icon dropdown + New Product Button */}
+        <div className="flex items-center gap-2 shrink-0 self-end lg:self-auto relative">
           
-          <button
-            type="button"
-            onClick={() => setIsImportModalOpen(true)}
-            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-mono font-bold text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl transition shadow-sm cursor-pointer flex items-center gap-1.5"
-          >
-            <Upload className="h-3.5 w-3.5 text-zinc-400" />
-            Import
-          </button>
+          {/* Gear icon dropdown for import/export configurations */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsGearMenuOpen(!isGearMenuOpen)}
+              className="p-2.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition shadow-sm cursor-pointer flex items-center justify-center"
+              title="Catalog Tools & Import/Export"
+            >
+              <Settings className={`h-4.5 w-4.5 text-zinc-500 dark:text-zinc-400 transition-transform duration-200 ${isGearMenuOpen ? 'rotate-45' : ''}`} />
+            </button>
 
+            {isGearMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setIsGearMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#141416] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl py-2 z-50 text-xs text-zinc-750 dark:text-zinc-300 animate-fade-in">
+                  <div className="px-3.5 py-1.5 border-b border-zinc-100 dark:border-zinc-800 text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                    Database Utilities
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      setIsGearMenuOpen(false);
+                      handleExportProducts();
+                    }}
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 font-mono font-bold flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5 text-zinc-400" />
+                    Export Catalog (JSON)
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsGearMenuOpen(false);
+                      setIsImportModalOpen(true);
+                    }}
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 font-mono font-bold flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Upload className="h-3.5 w-3.5 text-zinc-400" />
+                    Import Catalog (JSON)
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsGearMenuOpen(false);
+                      handleImportDemoProducts();
+                    }}
+                    disabled={isReadOnly}
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 font-mono font-bold flex items-center gap-2 transition cursor-pointer disabled:opacity-40 text-[#d97706]"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-[#d97706]" />
+                    Load Demo Catalog
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* New Product Trigger Button */}
           <button
             type="button"
             disabled={isReadOnly}
             onClick={() => setIsCreateModalOpen(true)}
-            className="bg-[#d97706] text-white hover:bg-[#b45309] font-mono font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-xl transition-all shadow-[0_2px_4px_rgba(217,119,6,0.15)] hover:shadow-md cursor-pointer flex items-center gap-2 disabled:opacity-45"
+            className="bg-[#d97706] text-white hover:bg-[#b45309] font-mono font-bold text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-[0_2px_4px_rgba(217,119,6,0.15)] hover:shadow-md cursor-pointer flex items-center gap-1.5 disabled:opacity-45"
           >
-            <Plus className="h-4.5 w-4.5" />
+            <Plus className="h-4 w-4" />
             New Product
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* MAIN CONTAINER: Table and Filters */}
-      <main className="flex-1 overflow-hidden p-8 flex gap-6 relative">
+      {/* MAIN CONTAINER: Split view setup between visual grid cards and details panel */}
+      <main className="flex-1 overflow-hidden p-6 flex gap-6">
         
-        {/* SHOPIFY PLATFORM CARD SECTION */}
+        {/* PRODUCTS VISUAL CARD CATALOG SECTION */}
         <div className="flex-1 flex flex-col h-full bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)] overflow-hidden">
           
-          {/* CATEGORY TABS SYSTEM */}
-          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 px-6 shrink-0 bg-zinc-50/50 dark:bg-[#161619]/40">
-            <div className="flex gap-4">
-              {(['All', 'Liquor', 'Wine', 'Beer', 'Extras'] as const).map((tab) => {
-                const isActive = activeCategoryTab === tab;
-                const count = tab === 'All' ? products.length : products.filter(p => p.category === tab).length;
-                return (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveCategoryTab(tab)}
-                    className={`py-4 px-2 font-mono font-bold text-[11px] uppercase tracking-wider border-b-2 transition-all cursor-pointer relative ${
-                      isActive 
-                        ? 'border-[#d97706] text-zinc-900 dark:text-white' 
-                        : 'border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300'
-                    }`}
-                  >
-                    <span>{tab === 'All' ? 'All Products' : tab}</span>
-                    <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-sans">
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest hidden sm:block">
-              AuraPOS Catalog Engine
+          <div className="p-3.5 border-b border-zinc-100 dark:border-zinc-850/60 bg-zinc-50/40 dark:bg-[#131315]/40 shrink-0 flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+              Catalog Directory Screen
+            </span>
+            <div className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500">
+              Showing <span className="text-zinc-800 dark:text-white font-bold">{filteredList.length}</span> of {products.length} Products
             </div>
           </div>
 
-          {/* SEARCH BAR FOR LOOKING UP PRODUCTS */}
-          <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-[#111113] shrink-0 flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search catalog directory by product title, SKU code, brand supplier, or UPC barcode..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-xl focus:border-[#d97706] focus:bg-white dark:focus:bg-zinc-950 focus:outline-none text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 transition-all shadow-inner"
-              />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3.5 top-3.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="text-xs font-mono text-zinc-400 whitespace-nowrap bg-zinc-50 dark:bg-zinc-900 px-3 py-2 rounded-lg border border-zinc-200/40 dark:border-zinc-800">
-              Showing <span className="text-zinc-800 dark:text-white font-bold">{filteredList.length}</span> of {products.length}
-            </div>
-          </div>
-
-          {/* SHOPIFY-STYLE PRODUCTS DATATABLE */}
-          <div className="flex-1 overflow-auto bg-white dark:bg-[#0c0c0e]">
+          <div className="flex-1 overflow-auto p-5 bg-[#fcfcfc] dark:bg-[#0c0c0e]">
             {filteredList.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-[#fafafb]/30 dark:bg-[#0c0c0e]">
+              <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-transparent">
                 <div className="h-16 w-16 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-full flex items-center justify-center text-zinc-300 dark:text-zinc-700 mb-4 stroke-[1.5]">
                   <Package className="h-7 w-7" />
                 </div>
@@ -583,13 +664,11 @@ export default function Inventory({
                   No warehouse products found
                 </h3>
                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1.5 max-w-md mx-auto leading-relaxed uppercase font-mono tracking-wider">
-                  {searchQuery 
-                    ? "Adjust your filters or query string to find matching inventory records." 
-                    : "Your product catalog is empty. Click Import Demo Catalog to get started instantly!"}
+                  Adjust your search queries or filter dropdown constraints to reveal matching database records.
                 </p>
 
                 <div className="flex items-center gap-3 mt-6">
-                  {!searchQuery && (
+                  {products.length === 0 && (
                     <button
                       type="button"
                       onClick={handleImportDemoProducts}
@@ -610,148 +689,164 @@ export default function Inventory({
                 </div>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse min-w-[1000px]">
-                <thead>
-                  <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-[#131315]/40 text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider select-none">
-                    <th className="py-4 px-6 w-4"></th>
-                    <th className="py-4 px-4">Product details</th>
-                    <th className="py-4 px-4">UPC / Barcode</th>
-                    <th className="py-4 px-4">SKU Code</th>
-                    <th className="py-4 px-4">Category</th>
-                    <th className="py-4 px-4 text-right">Retail P/B</th>
-                    <th className="py-4 px-4 text-right">Dist. Cost</th>
-                    <th className="py-4 px-4 text-center">Pack ratio</th>
-                    <th className="py-4 px-4 text-right">Stock On Hand</th>
-                    <th className="py-4 px-4">Vendor</th>
-                    <th className="py-4 px-4 text-center">Legal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850 text-xs">
-                  {filteredList.map((p) => {
-                    const isSelected = p.id === selectedProductId;
-                    const stockStatus = p.inventory_bottles === 0 
-                      ? 'out' 
-                      : (p.inventory_bottles < p.bottles_per_case ? 'low' : 'good');
+              <div className={`grid gap-4 transition-all duration-300 ${
+                selectedProductId 
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3' 
+                  : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+              }`}>
+                {filteredList.map((p) => {
+                  const isSelected = p.id === selectedProductId;
+                  const stockStatus = p.inventory_bottles === 0 
+                    ? 'out' 
+                    : (p.inventory_bottles < p.bottles_per_case ? 'low' : 'good');
 
-                    return (
-                      <tr
-                        key={p.id}
-                        onClick={() => {
-                          setSelectedProductId(p.id);
-                          setIsEditingRecord(false);
-                        }}
-                        className={`hover:bg-zinc-50/70 dark:hover:bg-[#151518]/70 cursor-pointer transition duration-150 select-none ${
-                          isSelected 
-                            ? 'bg-amber-500/5 dark:bg-amber-500/5 border-l-2 border-l-[#d97706]' 
-                            : ''
-                        }`}
-                      >
-                        <td className="py-3 px-6">
-                          <input 
-                            type="checkbox" 
-                            checked={isSelected}
-                            onChange={() => {}} // Controlled by row click
-                            className="h-3.5 w-3.5 text-[#d97706] border-zinc-300 dark:border-zinc-700 rounded focus:ring-0 cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-3 px-4 font-sans">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                              {p.imageUrl ? (
-                                <img src={p.imageUrl} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                              ) : (
-                                <Package className="h-4.5 w-4.5 text-zinc-400 stroke-[1.5]" />
-                              )}
-                            </div>
-                            <div>
-                              <span className="font-semibold text-zinc-900 dark:text-white text-xs block hover:text-[#d97706] transition line-clamp-1">{p.name}</span>
-                              <span className="text-[10px] text-zinc-400 block mt-0.5 font-mono">ID: {p.id}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-mono text-zinc-500 text-[11px]">
-                          {p.barcode || <span className="text-zinc-300 dark:text-zinc-700">N/A</span>}
-                        </td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-zinc-600 dark:text-zinc-400 font-semibold">
-                          {p.distributor_sku || <span className="text-zinc-300 dark:text-zinc-700">N/A</span>}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
-                            p.category === 'Liquor' ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200/50' :
-                            p.category === 'Wine' ? 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200/50' :
-                            p.category === 'Beer' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200/50' :
-                            'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200'
-                          }`}>
-                            {p.category}
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedProductId(p.id);
+                        setIsEditingRecord(false);
+                      }}
+                      className={`group bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all duration-200 cursor-pointer relative ${
+                        isSelected 
+                          ? 'ring-2 ring-[#d97706] border-transparent shadow-sm bg-amber-500/[0.01]' 
+                          : 'hover:border-zinc-350 dark:hover:border-zinc-700'
+                      }`}
+                    >
+                      {/* Top Row: category and restrictions */}
+                      <div className="flex items-center justify-between gap-1.5 mb-3">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest border ${
+                          p.category === 'Liquor' ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200/40' :
+                          p.category === 'Wine' ? 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200/40' :
+                          p.category === 'Beer' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200/40' :
+                          'bg-zinc-150 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200/60'
+                        }`}>
+                          {p.category}
+                        </span>
+
+                        {p.age_restricted && (
+                          <span 
+                            className="text-[9px] select-none shrink-0 bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded border border-red-500/15 font-mono font-bold uppercase tracking-wider"
+                            title="21+ Compliance Age Lock Active"
+                          >
+                            🔞 21+
                           </span>
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-[11px] text-zinc-900 dark:text-white font-bold">
-                          ${p.price_per_bottle.toFixed(2)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-[11px] text-zinc-500">
-                          {p.cost_per_unit ? `$${p.cost_per_unit.toFixed(2)}` : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono text-[11px] text-zinc-500">
-                          {p.bottles_per_case} bts/cs
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono shrink-0">
-                          <div className={`font-bold ${
-                            stockStatus === 'out' ? 'text-red-600 dark:text-red-400' :
-                            stockStatus === 'low' ? 'text-amber-600 dark:text-amber-400' :
-                            'text-emerald-600 dark:text-emerald-400'
+                        )}
+                      </div>
+
+                      {/* Image block */}
+                      <div className="h-32 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-850/60 overflow-hidden flex items-center justify-center mb-3 relative select-none">
+                        {p.imageUrl ? (
+                          <img 
+                            src={p.imageUrl} 
+                            alt={p.name} 
+                            referrerPolicy="no-referrer" 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                          />
+                        ) : (
+                          <Package className="h-10 w-10 text-zinc-300 dark:text-zinc-700 stroke-[1.25]" />
+                        )}
+
+                        {/* Quick stock overlay badge */}
+                        <div className="absolute bottom-2.5 left-2.5">
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-mono uppercase tracking-widest font-black shadow-sm border ${
+                            stockStatus === 'out' ? 'bg-red-500 text-white border-transparent' :
+                            stockStatus === 'low' ? 'bg-amber-500 text-white border-transparent' :
+                            'bg-emerald-500 text-white border-transparent'
+                          }`}>
+                            {stockStatus === 'out' ? 'Out of Stock' : stockStatus === 'low' ? 'Low Stock' : 'In Stock'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Title */}
+                      <div className="flex-1 mb-3">
+                        <h3 className="font-serif italic font-semibold text-zinc-900 dark:text-white text-xs line-clamp-2 leading-snug group-hover:text-[#d97706] transition-colors">
+                          {p.name}
+                        </h3>
+                        
+                        {/* ID & UPC Barcode details */}
+                        <div className="mt-2 space-y-0.5 text-[9px] font-mono text-zinc-400 dark:text-zinc-500">
+                          {p.distributor_sku && (
+                            <div className="flex justify-between">
+                              <span>SKU:</span>
+                              <span className="font-semibold text-zinc-650 dark:text-zinc-300">{p.distributor_sku}</span>
+                            </div>
+                          )}
+                          {p.barcode && (
+                            <div className="flex justify-between">
+                              <span>Barcode:</span>
+                              <span className="text-zinc-650 dark:text-zinc-350">{p.barcode}</span>
+                            </div>
+                          )}
+                          {p.vendor && (
+                            <div className="flex justify-between max-w-full truncate">
+                              <span>Vendor:</span>
+                              <span className="text-zinc-600 dark:text-zinc-400 font-sans font-medium max-w-[120px] truncate">{p.vendor}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Footer: Price vs Inventory */}
+                      <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800 flex items-end justify-between">
+                        <div>
+                          <p className="text-[8px] font-mono uppercase text-zinc-400 font-bold">Price</p>
+                          <p className="font-mono text-xs font-black text-zinc-900 dark:text-white mt-0.5">
+                            ${p.price_per_bottle.toFixed(2)}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-[8px] font-mono uppercase text-zinc-400 font-bold">Stock</p>
+                          <p className={`font-mono font-black text-xs mt-0.5 ${
+                            stockStatus === 'out' ? 'text-red-500' :
+                            stockStatus === 'low' ? 'text-amber-500' :
+                            'text-emerald-500'
                           }`}>
                             {p.inventory_bottles} Bts
-                          </div>
-                          <div className="text-[10px] text-zinc-400 font-normal mt-0.5">
+                          </p>
+                          <p className="text-[8px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-mono">
                             ({Math.floor(p.inventory_bottles / p.bottles_per_case)} Cs)
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-sans text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">
-                          {p.vendor || <span className="text-zinc-300 dark:text-zinc-700">None</span>}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          {p.age_restricted ? (
-                            <span className="cursor-help" title="21+ Compliance Age Lock Active">🔞</span>
-                          ) : (
-                            <span className="text-zinc-300 dark:text-zinc-700">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </p>
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
 
-        {/* ACTIVE RECORD SLIDE-OVER DRAWER (Shopify/Odoo Style) */}
+        {/* ACTIVE RECORD SPLIT DETAIL PANEL (Shopify/Odoo Style) */}
         {selectedProduct && (
-          <div className="absolute top-0 right-0 h-full w-[540px] bg-white dark:bg-[#141416] border-l border-zinc-200/80 dark:border-zinc-800 flex flex-col shadow-[-4px_0_24px_rgba(0,0,0,0.06)] z-25 transition-transform duration-300">
+          <div className="w-[420px] xl:w-[450px] bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800 rounded-2xl flex flex-col shadow-[0_2px_12px_rgba(0,0,0,0.02)] overflow-hidden shrink-0 h-full animate-fade-in">
             
             {/* Drawer Header */}
-            <div className="p-6 border-b border-zinc-200/80 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] flex items-start justify-between">
+            <div className="p-5 border-b border-zinc-200/80 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] flex items-start justify-between">
               <div className="space-y-1.5 pr-4 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[8px] uppercase bg-amber-500/10 text-[#d97706] border border-amber-500/20 px-2 py-0.5 rounded font-black tracking-widest">
-                    Odoo Active Record
+                    Active Record Specs
                   </span>
                   <span className="font-mono text-[9px] text-zinc-400">
                     ID: {selectedProduct.id}
                   </span>
                 </div>
                 
-                <h3 className="font-serif italic font-semibold text-xl text-zinc-950 dark:text-white leading-tight">
+                <h3 className="font-serif italic font-semibold text-lg text-zinc-950 dark:text-white leading-tight">
                   {selectedProduct.name}
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2.5 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {!isEditingRecord ? (
                   <button
                     onClick={handleStartEditRecord}
                     disabled={isReadOnly}
-                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase hover:border-[#1a1a1a] dark:hover:border-white transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 px-2.5 py-1.5 rounded-lg text-[9px] font-mono font-bold uppercase hover:border-[#1a1a1a] dark:hover:border-white transition shadow-sm cursor-pointer flex items-center gap-1 disabled:opacity-40"
                   >
                     <Save className="h-3 w-3 text-zinc-400" />
                     Edit Specs
@@ -769,7 +864,7 @@ export default function Inventory({
                   onClick={() => setSelectedProductId(null)}
                   className="p-1 rounded-lg hover:bg-zinc-150 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
                 >
-                  <X className="h-4.5 w-4.5" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -778,51 +873,51 @@ export default function Inventory({
             <div className="flex-1 overflow-y-auto divide-y divide-zinc-150 dark:divide-zinc-800">
               
               {/* Product Specifications Section */}
-              <div className="p-6">
+              <div className="p-5">
                 {!isEditingRecord ? (
                   /* Read Mode */
-                  <div className="grid grid-cols-2 gap-y-4.5 gap-x-6 text-xs">
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-5 text-xs">
                     <div>
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Retail Bottle Price</p>
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Retail Bottle Price</p>
                       <p className="font-bold text-sm text-zinc-900 dark:text-white mt-1 font-mono">${selectedProduct.price_per_bottle.toFixed(2)}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Wholesale Unit Cost</p>
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Wholesale Unit Cost</p>
                       <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
                         {selectedProduct.cost_per_unit ? `$${selectedProduct.cost_per_unit.toFixed(2)}` : 'Not Configured'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Primary Distributor</p>
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Primary Distributor</p>
                       <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1">{selectedProduct.vendor || 'No vendor linked'}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Distributor SKU</p>
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Distributor SKU</p>
                       <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1 font-mono">{selectedProduct.distributor_sku || 'No SKU code'}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Age Compliance Restrictions</p>
-                      <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1 flex items-center gap-1.5">
-                        {selectedProduct.age_restricted ? '🔞 21+ Age Verification Required' : 'No legal restriction'}
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Age Compliance</p>
+                      <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1 flex items-center gap-1">
+                        {selectedProduct.age_restricted ? '🔞 21+ Age Verification Gate' : 'Unrestricted General'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Bottles Per Case Ratio</p>
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Pack Ratio (bts/cs)</p>
                       <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1 font-mono">{selectedProduct.bottles_per_case} Bottles / Case</p>
                     </div>
-                    <div className="col-span-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold mb-1">Stock on hand inventory</p>
+                    <div className="col-span-2 pt-1.5 border-t border-zinc-100 dark:border-zinc-800">
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold mb-1">Stock on hand inventory</p>
                       <div className="flex items-center gap-4 py-2 px-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl">
                         <div className="font-mono tabular-nums">
                           <span className="text-zinc-900 dark:text-white font-extrabold text-sm">{selectedProduct.inventory_bottles}</span>
-                          <span className="text-zinc-400 text-[10px] ml-1">total bottles</span>
+                          <span className="text-zinc-400 text-[9px] ml-1">total bottles</span>
                         </div>
                         <div className="text-zinc-300 dark:text-zinc-700">|</div>
                         <div className="font-mono tabular-nums">
                           <span className="text-zinc-900 dark:text-white font-bold text-sm">
                             {Math.floor(selectedProduct.inventory_bottles / selectedProduct.bottles_per_case)}
                           </span>
-                          <span className="text-zinc-400 text-[10px] ml-1">cases ({selectedProduct.bottles_per_case} pack)</span>
+                          <span className="text-zinc-400 text-[9px] ml-1">cases ({selectedProduct.bottles_per_case} pack)</span>
                         </div>
                       </div>
                     </div>
@@ -831,7 +926,7 @@ export default function Inventory({
                   /* Edit Mode Specs */
                   <form onSubmit={handleSaveProductEdit} className="space-y-4 text-xs">
                     <div>
-                      <label className="block text-[10px] font-mono font-bold uppercase text-zinc-400 mb-1">Product Title</label>
+                      <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Product Title</label>
                       <input
                         type="text"
                         value={editFormData.name}
@@ -841,7 +936,7 @@ export default function Inventory({
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-mono font-bold uppercase text-zinc-400 mb-1">Retail Price ($)</label>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Retail Price ($)</label>
                         <input
                           type="number"
                           step="0.01"
@@ -851,7 +946,7 @@ export default function Inventory({
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor Cost ($)</label>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor Cost ($)</label>
                         <input
                           type="number"
                           step="0.01"
@@ -863,7 +958,7 @@ export default function Inventory({
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor SKU</label>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor SKU</label>
                         <input
                           type="text"
                           value={editFormData.distributor_sku}
@@ -872,7 +967,7 @@ export default function Inventory({
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-mono font-bold uppercase text-zinc-400 mb-1">Vendor Name</label>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Vendor Name</label>
                         <input
                           type="text"
                           value={editFormData.vendor}
@@ -883,7 +978,7 @@ export default function Inventory({
                     </div>
                     <button
                       type="submit"
-                      className="w-full bg-[#1a1a1a] dark:bg-white text-white dark:text-zinc-950 py-3 font-mono font-bold border border-[#1a1a1a] uppercase tracking-widest text-xs hover:bg-[#d97706] hover:text-white transition cursor-pointer"
+                      className="w-full bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 py-2.5 font-mono font-bold border border-transparent uppercase tracking-widest text-[10px] hover:bg-[#d97706] hover:text-white dark:hover:bg-[#d97706] dark:hover:text-white transition cursor-pointer rounded-xl"
                     >
                       Save Specifications
                     </button>
@@ -892,11 +987,11 @@ export default function Inventory({
               </div>
 
               {/* Odoo Audit Chatter Stream Section */}
-              <div className="p-6 space-y-5">
+              <div className="p-5 space-y-5">
                 <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-3">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4.5 w-4.5 text-[#d97706]" />
-                    <span className="font-serif italic font-semibold text-base text-zinc-950 dark:text-white">Record Chatter Timeline</span>
+                    <span className="font-serif italic font-semibold text-sm text-zinc-950 dark:text-white">Record Chatter Timeline</span>
                   </div>
                   <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
                     {selectedProduct.chatter?.length || 0} Events
@@ -908,7 +1003,7 @@ export default function Inventory({
                   <input
                     type="text"
                     required
-                    placeholder="Type an internal staff log, stock verification, or supplier note..."
+                    placeholder="Type staff log, verification or supplier note..."
                     value={chatterComment}
                     onChange={(e) => setChatterComment(e.target.value)}
                     className="flex-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-850 dark:text-zinc-200 focus:outline-none focus:border-[#d97706] placeholder-zinc-400 dark:placeholder-zinc-500 font-sans"
@@ -916,16 +1011,16 @@ export default function Inventory({
                   <button
                     type="submit"
                     disabled={isPostingComment || !chatterComment.trim()}
-                    className="bg-zinc-950 dark:bg-white hover:bg-[#d97706] dark:hover:bg-[#d97706] text-white dark:text-zinc-950 hover:text-white dark:hover:text-white px-4.5 py-2.5 rounded-xl font-mono text-[10px] font-bold uppercase transition shrink-0 cursor-pointer disabled:opacity-40"
+                    className="bg-zinc-950 dark:bg-white hover:bg-[#d97706] dark:hover:bg-[#d97706] text-white dark:text-zinc-950 hover:text-white dark:hover:text-white px-4 py-2.5 rounded-xl font-mono text-[9px] font-bold uppercase transition shrink-0 cursor-pointer disabled:opacity-40"
                   >
                     Post Note
                   </button>
                 </form>
 
                 {/* Chatter History */}
-                <div className="space-y-4.5 max-h-[280px] overflow-y-auto pr-1">
+                <div className="space-y-4 max-h-[250px] overflow-y-auto pr-1">
                   {(!selectedProduct.chatter || selectedProduct.chatter.length === 0) ? (
-                    <div className="text-center py-6 text-zinc-400 text-[10px] font-mono uppercase tracking-widest bg-zinc-50 dark:bg-[#121212]/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    <div className="text-center py-6 text-zinc-400 text-[9px] font-mono uppercase tracking-widest bg-zinc-50/50 dark:bg-[#121212]/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
                       No audited actions logged yet.
                     </div>
                   ) : (
@@ -956,7 +1051,7 @@ export default function Inventory({
                             {icon}
                           </div>
                           <div className="flex-1 space-y-1">
-                            <div className="flex items-center justify-between text-[10px]">
+                            <div className="flex items-center justify-between text-[9px]">
                               <span className="font-bold text-zinc-850 dark:text-white">{cht.user}</span>
                               <span className="text-zinc-400 font-mono">
                                 {new Date(cht.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -977,10 +1072,10 @@ export default function Inventory({
         )}
       </main>
 
-      {/* MODAL 1: ADD / CATALOG NEW PRODUCT (Shopify Styled) */}
+      {/* MODAL 1: ADD / CATALOG NEW PRODUCT */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-zinc-950/60 dark:bg-black/80 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#121214] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-white dark:bg-[#121214] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
             
             {/* Modal Header */}
             <div className="p-6 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-[#18181b]">
@@ -1001,7 +1096,7 @@ export default function Inventory({
             {/* Modal Content Form */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               
-              {/* GLOBAL REGISTRY AUTOFILL (Now inside Modal!) */}
+              {/* GLOBAL REGISTRY AUTOFILL */}
               <div className="p-4 bg-[#faf9f6] dark:bg-[#18181b] rounded-xl border border-amber-500/10 dark:border-amber-500/5">
                 <div className="flex items-center gap-2 mb-2">
                   <QrCode className="h-4.5 w-4.5 text-[#d97706]" />
@@ -1019,7 +1114,7 @@ export default function Inventory({
                     placeholder="Scan barcode or type digits (e.g. 5011007003003)..."
                     value={lookupBarcode}
                     onChange={(e) => setLookupBarcode(e.target.value)}
-                    className="flex-1 bg-white dark:bg-[#0c0c0e] border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-[#d97706]"
+                    className="flex-1 bg-white dark:bg-[#0c0c0e] border border-zinc-200/80 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-[#d97706]"
                   />
                   <button
                     type="button"
@@ -1204,10 +1299,10 @@ export default function Inventory({
         </div>
       )}
 
-      {/* MODAL 2: IMPORT PRODUCTS CATALOG (Shopify Styled) */}
+      {/* MODAL 2: IMPORT PRODUCTS CATALOG */}
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-zinc-950/60 dark:bg-black/80 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#121214] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-[#121214] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col animate-fade-in">
             
             <div className="p-6 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-[#18181b]">
               <div className="flex items-center gap-2">
@@ -1246,7 +1341,7 @@ export default function Inventory({
 
               <div className="relative flex py-2 items-center">
                 <div className="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
-                <span className="flex-shrink mx-4 text-zinc-400 font-mono text-[10px] uppercase">Or Paste Custom Catalog JSON</span>
+                <span className="flex-shrink mx-4 text-zinc-400 font-mono text-[10px] uppercase font-bold">Or Paste Custom Catalog JSON</span>
                 <div className="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
               </div>
 
