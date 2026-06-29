@@ -15,6 +15,8 @@ interface RegisterProps {
   refreshData: () => void;
   showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
   discountRules?: DiscountRule[];
+  activeUserId?: string;
+  activeUser?: string;
 }
 
 export default function Register({ 
@@ -24,7 +26,9 @@ export default function Register({
   customers, 
   refreshData,
   showToast,
-  discountRules = []
+  discountRules = [],
+  activeUserId = 'user_cashier_1',
+  activeUser = 'Elena Rostova'
 }: RegisterProps) {
   // Search & Filter state
   const [search, setSearch] = useState('');
@@ -277,8 +281,8 @@ export default function Register({
         payment_method: paymentMethod,
         age_verified_at: hasAgeRestrictedItems ? new Date().toISOString() : undefined,
         age_verified_dob: verifiedDob || undefined,
-        cashier_id: 'user_cashier_1',
-        cashier_name: 'Elena Rostova'
+        cashier_id: activeUserId,
+        cashier_name: activeUser
       };
 
       const response = await fetch(`/api/transactions?tenant_id=${tenantId}`, {

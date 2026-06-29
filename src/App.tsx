@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Package, FileText, Sun, Moon, 
   Layers, RefreshCw, AlertCircle, ShieldCheck, CheckCircle2, ChevronRight, Store, Percent,
-  Menu, ChevronLeft, Truck, Megaphone, DollarSign, Printer, Globe, Users, Tag, Lock, Laptop
+  Menu, ChevronLeft, Truck, Megaphone, DollarSign, Printer, Globe, User, Users, Tag, Lock, Laptop, Key, Fingerprint, Check
 } from 'lucide-react';
 import Register from './components/Register';
 import Inventory from './components/Inventory';
@@ -53,6 +53,58 @@ const INITIAL_DISCOUNT_RULES: DiscountRule[] = [
   }
 ];
 
+interface SettingsUser {
+  id: string;
+  name: string;
+  role: 'Admin' | 'Manager' | 'Cashier';
+  pin: string;
+}
+
+const DEFAULT_USERS: SettingsUser[] = [
+  { id: 'usr_1', name: 'Elena Rostova (Store Owner)', role: 'Admin', pin: '1111' },
+  { id: 'usr_2', name: 'Marcus Brody (Floor Manager)', role: 'Manager', pin: '2222' },
+  { id: 'usr_3', name: 'Sarah Jenkins (POS Cashier)', role: 'Cashier', pin: '3333' }
+];
+
+const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, string>> = {
+  Admin: {
+    register: 'Admin',
+    inventory: 'Admin',
+    history: 'Admin',
+    discounts: 'Admin',
+    purchases: 'Admin',
+    marketing: 'Admin',
+    print: 'Admin',
+    integrations: 'Admin',
+    website: 'Admin',
+    settings: 'Admin',
+  },
+  Manager: {
+    register: 'Admin',
+    inventory: 'Write',
+    history: 'Write',
+    discounts: 'Write',
+    purchases: 'Write',
+    marketing: 'Write',
+    print: 'Write',
+    integrations: 'Write',
+    website: 'Write',
+    settings: 'Read Only',
+  },
+  Cashier: {
+    register: 'Write',
+    inventory: 'No Access',
+    history: 'Read Only',
+    discounts: 'No Access',
+    purchases: 'No Access',
+    marketing: 'No Access',
+    print: 'Read Only',
+    integrations: 'No Access',
+    website: 'No Access',
+    settings: 'No Access',
+  }
+};
+
 export default function App() {
   // Theme & Layout state
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
@@ -61,6 +113,96 @@ export default function App() {
   >('register');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [activeRole, setActiveRole] = useState<'Admin' | 'Manager' | 'Cashier'>('Admin');
+
+  // Employee Governance States
+  const [users, setUsers] = useState<SettingsUser[]>(() => {
+    const saved = localStorage.getItem('aura_pos_users_list');
+    return saved ? JSON.parse(saved) : DEFAULT_USERS;
+  });
+
+  const [currentUser, setCurrentUser] = useState<SettingsUser>(() => {
+    const saved = localStorage.getItem('aura_pos_active_user');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const usersListStr = localStorage.getItem('aura_pos_users_list');
+        const usersList = usersListStr ? JSON.parse(usersListStr) : DEFAULT_USERS;
+        const matched = usersList.find((u: any) => u.id === parsed.id);
+        if (matched) return matched;
+      } catch (err) {}
+    }
+    return DEFAULT_USERS[0]; // Default Elena Rostova (Admin)
+  });
+
+  const [rolePermissions, setRolePermissions] = useState<Record<string, Record<string, string>>>(() => {
+    const saved = localStorage.getItem('aura_pos_role_permissions');
+    return saved ? JSON.parse(saved) : DEFAULT_ROLE_PERMISSIONS;
+  });
+
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [selectedLockUser, setSelectedLockUser] = useState<SettingsUser>(currentUser || DEFAULT_USERS[0]);
+  const [lockPin, setLockPin] = useState<string>('');
+
+  // Keypad press handler for lock screen
+  const handleKeypadPress = (val: string) => {
+    if (lockPin.length >= 4) return;
+    const nextPin = lockPin + val;
+    setLockPin(nextPin);
+    
+    if (nextPin.length === 4) {
+      if (nextPin === selectedLockUser.pin) {
+        setCurrentUser(selectedLockUser);
+        setActiveRole(selectedLockUser.role);
+        setIsLocked(false);
+        setLockPin('');
+        showToast(`Welcome back, ${selectedLockUser.name}! Console unlocked.`, 'success');
+      } else {
+        showToast('Invalid Security PIN key. Access Denied.', 'error');
+        setTimeout(() => setLockPin(''), 400);
+      }
+    }
+  };
+
+  const handleBackspace = () => {
+    setLockPin(prev => prev.slice(0, -1));
+  };
+
+  // Keep lock user in sync with currentUser when changed outside lock screen
+  useEffect(() => {
+    if (currentUser) {
+      setSelectedLockUser(currentUser);
+    }
+  }, [currentUser]);
+
+  // Global Keybind Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F12') {
+        e.preventDefault();
+        setIsLocked(true);
+        showToast('Console Lock activated via shortcut.', 'info');
+      }
+      if (e.key === 'F10') {
+        e.preventDefault();
+        showToast('[F10] CASH DRAWER TRIPPED: Solenoid fired [USB-PORT3]', 'success');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('aura_pos_users_list', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('aura_pos_active_user', JSON.stringify(currentUser));
+    setActiveRole(currentUser.role);
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('aura_pos_role_permissions', JSON.stringify(rolePermissions));
+  }, [rolePermissions]);
 
   // Dynamic system clock state
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -298,164 +440,184 @@ export default function App() {
             <nav className="flex flex-col gap-1 text-xs font-semibold tracking-tight">
               
               {/* Register */}
-              <button
-                onClick={() => setActiveTab('register')}
-                title="01. REGISTER"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'register' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <ShoppingBag className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">REGISTER</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['register'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('register')}
+                  title="01. REGISTER"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'register' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <ShoppingBag className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">REGISTER</span>}
+                </button>
+              )}
 
               {/* Products */}
-              <button
-                onClick={() => setActiveTab('inventory')}
-                title="PRODUCT CATALOG"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'inventory' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Package className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRODUCTS</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['inventory'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('inventory')}
+                  title="PRODUCT CATALOG"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'inventory' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Package className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRODUCTS</span>}
+                </button>
+              )}
 
               {/* Reports */}
-              <button
-                onClick={() => setActiveTab('history')}
-                title="ANALYTICS & DATABASE"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'history' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <FileText className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">TRANSACTIONS</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['history'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('history')}
+                  title="ANALYTICS & DATABASE"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'history' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <FileText className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">TRANSACTIONS</span>}
+                </button>
+              )}
 
               {/* Discounts */}
-              <button
-                onClick={() => setActiveTab('discounts')}
-                title="OFFERS & CAMPAIGNS"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'discounts' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Percent className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PROMOTIONS</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['discounts'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('discounts')}
+                  title="OFFERS & CAMPAIGNS"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'discounts' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Percent className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PROMOTIONS</span>}
+                </button>
+              )}
 
               {/* Purchases */}
-              <button
-                onClick={() => setActiveTab('purchases')}
-                title="LOGISTICS & ORDERS"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'purchases' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Truck className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PURCHASES</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['purchases'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('purchases')}
+                  title="LOGISTICS & ORDERS"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'purchases' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Truck className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PURCHASES</span>}
+                </button>
+              )}
 
               {/* Marketing */}
-              <button
-                onClick={() => setActiveTab('marketing')}
-                title="PUBLIC MARKETING"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'marketing' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Megaphone className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">MARKETING</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['marketing'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('marketing')}
+                  title="PUBLIC MARKETING"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'marketing' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Megaphone className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">MARKETING</span>}
+                </button>
+              )}
 
               {/* Print Material */}
-              <button
-                onClick={() => setActiveTab('print')}
-                title="PRINT DESIGNER"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'print' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Printer className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRINTING</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['print'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('print')}
+                  title="PRINT DESIGNER"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'print' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Printer className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRINTING</span>}
+                </button>
+              )}
 
               {/* Integrations */}
-              <button
-                onClick={() => setActiveTab('integrations')}
-                title="CLOUD INTEGRATIONS"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'integrations' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Globe className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">INTEGRATIONS</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['integrations'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('integrations')}
+                  title="CLOUD INTEGRATIONS"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'integrations' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Globe className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">INTEGRATIONS</span>}
+                </button>
+              )}
 
               {/* Online Store Website Builder */}
-              <button
-                onClick={() => setActiveTab('website')}
-                title="ONLINE STORE"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'website' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Laptop className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">ONLINE STORE</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['website'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('website')}
+                  title="ONLINE STORE"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'website' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Laptop className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">ONLINE STORE</span>}
+                </button>
+              )}
 
               {/* Settings & User Rights */}
-              <button
-                onClick={() => setActiveTab('settings')}
-                title="SYSTEM SETTINGS"
-                className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                } ${
-                  activeTab === 'settings' 
-                    ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                }`}
-              >
-                <Users className="h-4 w-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">SETTINGS</span>}
-              </button>
+              {(rolePermissions[currentUser.role]?.['settings'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  title="SYSTEM SETTINGS"
+                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
+                  } ${
+                    activeTab === 'settings' 
+                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  }`}
+                >
+                  <Users className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">SETTINGS</span>}
+                </button>
+              )}
 
             </nav>
           </div>
@@ -464,13 +626,24 @@ export default function App() {
         {/* Sidebar Footer Controls */}
         <div className="space-y-4 pt-4 border-t border-[#e4e4e7] dark:border-[#27272a]">
           {!isSidebarCollapsed && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between bg-[#f4f4f5] dark:bg-[#18181b] px-3 py-2 rounded-xl border border-[#e4e4e7] dark:border-[#27272a] text-[11px] font-medium">
-                <span className="text-[#71717a] dark:text-[#a1a1aa]">Terminal</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 rounded-full bg-[#10b981] animate-pulse"></div>
-                  <span className="text-[#09090b] dark:text-[#f4f4f5] font-bold">01</span>
+            <div className="bg-zinc-50 dark:bg-[#18181b] border border-[#1a1a1a]/10 dark:border-white/10 p-3 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400">
+                <span className="uppercase font-bold tracking-wider">Active Staff</span>
+                <span className="bg-[#d97706]/15 text-[#d97706] px-1.5 py-0.5 rounded text-[8px] font-bold font-mono uppercase">{currentUser.role}</span>
+              </div>
+              <div className="flex items-center justify-between gap-1">
+                <div className="truncate">
+                  <p className="text-[11px] font-bold text-zinc-900 dark:text-white truncate max-w-[100px]" title={currentUser.name}>
+                    {currentUser.name}
+                  </p>
                 </div>
+                <button
+                  onClick={() => setIsLocked(true)}
+                  className="p-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-red-500 hover:text-white text-zinc-600 dark:text-zinc-300 rounded-lg transition-all cursor-pointer shrink-0"
+                  title="Lock Workstation Console [F12]"
+                >
+                  <Lock className="h-3 w-3" />
+                </button>
               </div>
             </div>
           )}
@@ -558,6 +731,8 @@ export default function App() {
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
                       discountRules={discountRules}
+                      activeUserId={currentUser.id}
+                      activeUser={currentUser.name}
                     />
                   )}
 
@@ -568,6 +743,8 @@ export default function App() {
                       products={products}
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
+                      permissionLevel={rolePermissions[currentUser.role]?.['inventory'] || 'Admin'}
+                      activeUser={currentUser.name}
                     />
                   )}
 
@@ -579,6 +756,8 @@ export default function App() {
                       customers={customers}
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
+                      permissionLevel={rolePermissions[currentUser.role]?.['history'] || 'Admin'}
+                      activeUser={currentUser.name}
                     />
                   )}
 
@@ -597,6 +776,7 @@ export default function App() {
                       products={products}
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
+                      permissionLevel={rolePermissions[currentUser.role]?.['purchases'] || 'Admin'}
                     />
                   )}
 
@@ -641,8 +821,12 @@ export default function App() {
 
                   {activeTab === 'settings' && (
                     <Settings
-                      activeRole={activeRole}
-                      onChangeRole={setActiveRole}
+                      currentUser={currentUser}
+                      users={users}
+                      setUsers={setUsers}
+                      rolePermissions={rolePermissions}
+                      setRolePermissions={setRolePermissions}
+                      onLock={() => setIsLocked(true)}
                       showToast={showToast}
                     />
                   )}
@@ -665,6 +849,100 @@ export default function App() {
       </div>
 
     </div>
+
+      {/* 3.5 CONSOLE LOCK SCREEN OVERLAY */}
+      {isLocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 backdrop-blur-md animate-fade-in">
+          <div className="text-center space-y-6 max-w-sm w-full p-8 bg-white dark:bg-[#151518] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-[6px_6px_0px_rgba(217,119,6,1)] mx-4">
+            <div className="space-y-1.5">
+              <div className="h-12 w-12 bg-[#d97706]/10 text-[#d97706] rounded-2xl flex items-center justify-center mx-auto mb-2 border border-[#d97706]/20">
+                <Lock className="h-5 w-5 stroke-[1.8]" />
+              </div>
+              <h2 className="font-serif italic font-semibold text-2xl text-zinc-900 dark:text-white leading-none">Console Locked</h2>
+              <p className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Select identity & enter 4-digit PIN</p>
+            </div>
+
+            {/* Profile Selection */}
+            <div className="grid grid-cols-3 gap-2 py-1">
+              {users.map(u => {
+                const isSelected = selectedLockUser.id === u.id;
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedLockUser(u);
+                      setLockPin('');
+                    }}
+                    className={`p-2.5 border rounded-xl flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#d97706]/10 border-[#d97706] text-[#d97706] font-bold shadow-sm'
+                        : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-850'
+                    }`}
+                  >
+                    <User className="h-4 w-4 shrink-0" />
+                    <span className="text-[9px] font-bold uppercase tracking-wide truncate max-w-[80px]" title={u.name}>
+                      {u.name.split(' ')[0]}
+                    </span>
+                    <span className="text-[7px] font-mono font-bold tracking-widest uppercase text-zinc-400">{u.role}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* PIN Dot Indicators */}
+            <div className="space-y-4">
+              <div className="flex justify-center gap-4 py-1">
+                {[0, 1, 2, 3].map((index) => (
+                  <div
+                    key={index}
+                    className={`h-3.5 w-3.5 rounded-full transition-all duration-150 border ${
+                      lockPin.length > index
+                        ? 'bg-[#d97706] border-[#d97706] scale-110 shadow-[0_0_8px_rgba(217,119,6,0.5)]'
+                        : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* PIN Keypad Grid */}
+              <div className="grid grid-cols-3 gap-3 max-w-[220px] mx-auto">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleKeypadPress(num.toString())}
+                    className="h-11 w-11 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80 hover:bg-[#d97706]/15 hover:border-[#d97706]/40 text-zinc-800 dark:text-zinc-100 text-xs font-mono font-black flex items-center justify-center transition active:scale-95 cursor-pointer"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setLockPin('')}
+                  className="h-11 w-11 rounded-full text-[9px] font-mono font-bold text-zinc-400 hover:text-red-500 flex items-center justify-center transition active:scale-95 cursor-pointer uppercase tracking-wider"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleKeypadPress('0')}
+                  className="h-11 w-11 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80 hover:bg-[#d97706]/15 hover:border-[#d97706]/40 text-zinc-800 dark:text-zinc-100 text-xs font-mono font-black flex items-center justify-center transition active:scale-95 cursor-pointer"
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBackspace}
+                  className="h-11 w-11 rounded-full text-[9px] font-mono font-bold text-zinc-400 hover:text-[#d97706] flex items-center justify-center transition active:scale-95 cursor-pointer uppercase tracking-wider"
+                >
+                  Del
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. PREMIUM NOTIFICATION SYSTEMS (TOASTS) */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2.5 max-w-sm w-full">

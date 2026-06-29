@@ -7,6 +7,7 @@ interface PurchasesProps {
   products: Product[];
   refreshData: () => void;
   showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
+  permissionLevel?: string;
 }
 
 interface PurchaseOrder {
@@ -24,7 +25,8 @@ interface PurchaseOrder {
   totalCost: number;
 }
 
-export default function Purchases({ tenantId, products, refreshData, showToast }: PurchasesProps) {
+export default function Purchases({ tenantId, products, refreshData, showToast, permissionLevel = 'Admin' }: PurchasesProps) {
+  const isReadOnly = permissionLevel === 'Read Only';
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
     const saved = localStorage.getItem(`aura_pos_pos_${tenantId}`);
     if (saved) return JSON.parse(saved);
@@ -166,6 +168,10 @@ export default function Purchases({ tenantId, products, refreshData, showToast }
   };
 
   const handleReceivePO = async (poId: string) => {
+    if (isReadOnly) {
+      showToast("Access Denied: Read Only profiles cannot receive purchase order shipments", "error");
+      return;
+    }
     const po = purchaseOrders.find(o => o.id === poId);
     if (!po) return;
     if (po.status === 'Received') return;
@@ -208,6 +214,10 @@ export default function Purchases({ tenantId, products, refreshData, showToast }
   };
 
   const handleDeletePO = (poId: string) => {
+    if (isReadOnly) {
+      showToast("Access Denied: Read Only profiles cannot delete purchase orders", "error");
+      return;
+    }
     const confirmed = window.confirm(`Are you sure you want to delete PO ${poId}?`);
     if (confirmed) {
       savePOs(purchaseOrders.filter(o => o.id !== poId));
@@ -227,8 +237,15 @@ export default function Purchases({ tenantId, products, refreshData, showToast }
           </h2>
         </div>
         <button
-          onClick={() => setIsCreating(true)}
-          className="bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 px-4 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-all cursor-pointer flex items-center gap-1.5"
+          onClick={() => {
+            if (isReadOnly) {
+              showToast("Access Denied: Read Only profiles cannot create purchase orders", "error");
+              return;
+            }
+            setIsCreating(true);
+          }}
+          disabled={isReadOnly}
+          className="bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 px-4 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
         >
           <Plus className="h-3.5 w-3.5" />
           New Purchase Order

@@ -27,6 +27,14 @@ export interface ProductVariant {
   is_case: boolean; // if true, this variant is the case itself
 }
 
+export interface ChatterMessage {
+  id: string;
+  user: string;
+  action: 'created' | 'update' | 'inventory_received' | 'sale_deducted' | 'comment';
+  detail: string;
+  timestamp: string;
+}
+
 export interface Product {
   id: string;
   tenant_id: string;
@@ -47,6 +55,7 @@ export interface Product {
   vendor?: string; // Vendor name / distributor info
   variants?: ProductVariant[];
   createdAt: string;
+  chatter?: ChatterMessage[];
 }
 
 export interface Customer {
@@ -57,6 +66,7 @@ export interface Customer {
   phone: string;
   dob?: string; // for age check lookup
   createdAt: string;
+  chatter?: ChatterMessage[];
 }
 
 export interface TransactionItem {

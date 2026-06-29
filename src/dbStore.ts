@@ -339,7 +339,15 @@ class DatabaseStore {
       id: 'prod_' + Math.random().toString(36).substr(2, 9),
       tenant_id: tenantId,
       createdAt: new Date().toISOString(),
+      chatter: []
     };
+    newProduct.chatter!.push({
+      id: 'cht_' + Math.random().toString(36).substr(2, 9),
+      user: 'Staff',
+      action: 'created',
+      detail: `Created new catalog record for "${newProduct.name}" with initial retail price of $${newProduct.price_per_bottle.toFixed(2)}.`,
+      timestamp: new Date().toISOString()
+    });
     this.data.products.push(newProduct);
     this.save();
     return newProduct;
@@ -348,12 +356,48 @@ class DatabaseStore {
   updateProduct(tenantId: string, id: string, updates: Partial<Product>): Product | undefined {
     const index = this.data.products.findIndex(p => p.id === id && p.tenant_id === tenantId);
     if (index === -1) return undefined;
-    this.data.products[index] = {
-      ...this.data.products[index],
+    
+    const oldProduct = this.data.products[index];
+    const changelog: string[] = [];
+    
+    if (updates.name && updates.name !== oldProduct.name) {
+      changelog.push(`Name changed from "${oldProduct.name}" to "${updates.name}"`);
+    }
+    if (updates.price_per_bottle !== undefined && updates.price_per_bottle !== oldProduct.price_per_bottle) {
+      changelog.push(`Bottle price changed from $${oldProduct.price_per_bottle.toFixed(2)} to $${updates.price_per_bottle.toFixed(2)}`);
+    }
+    if (updates.cost_per_unit !== undefined && updates.cost_per_unit !== oldProduct.cost_per_unit) {
+      changelog.push(`Unit cost changed from $${(oldProduct.cost_per_unit || 0).toFixed(2)} to $${updates.cost_per_unit.toFixed(2)}`);
+    }
+    if (updates.vendor && updates.vendor !== oldProduct.vendor) {
+      changelog.push(`Vendor updated from "${oldProduct.vendor || 'None'}" to "${updates.vendor}"`);
+    }
+    if (updates.distributor_sku && updates.distributor_sku !== oldProduct.distributor_sku) {
+      changelog.push(`SKU changed from "${oldProduct.distributor_sku || 'None'}" to "${updates.distributor_sku}"`);
+    }
+
+    const updatedProduct = {
+      ...oldProduct,
       ...updates,
     };
+
+    if (!updatedProduct.chatter) {
+      updatedProduct.chatter = [];
+    }
+
+    if (changelog.length > 0) {
+      updatedProduct.chatter.push({
+        id: 'cht_' + Math.random().toString(36).substr(2, 9),
+        user: updates.vendor === undefined && updates.price_per_bottle === undefined ? 'Automated POS System' : 'Staff',
+        action: 'update',
+        detail: changelog.join(', '),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    this.data.products[index] = updatedProduct;
     this.save();
-    return this.data.products[index];
+    return updatedProduct;
   }
 
   // Case-to-Bottle intake function
@@ -368,10 +412,26 @@ class DatabaseStore {
     const updatedBottles = product.inventory_bottles + totalAdditionalBottles;
     const updatedCases = Math.floor(updatedBottles / product.bottles_per_case);
 
-    return this.updateProduct(tenantId, productId, {
+    const oldBottles = product.inventory_bottles;
+
+    const updated = this.updateProduct(tenantId, productId, {
       inventory_bottles: updatedBottles,
       inventory_cases: updatedCases,
     });
+
+    if (updated) {
+      if (!updated.chatter) updated.chatter = [];
+      updated.chatter.push({
+        id: 'cht_' + Math.random().toString(36).substr(2, 9),
+        user: 'Staff',
+        action: 'inventory_received',
+        detail: `Received shipment intake: Added ${cases} cases (${newBottlesFromCases} bottles) and ${looseBottles} loose bottles. Total inventory increased from ${oldBottles} to ${updatedBottles} bottles.`,
+        timestamp: new Date().toISOString()
+      });
+      this.save();
+    }
+
+    return updated;
   }
 
   // Customers
@@ -385,10 +445,95 @@ class DatabaseStore {
       id: 'cust_' + Math.random().toString(36).substr(2, 9),
       tenant_id: tenantId,
       createdAt: new Date().toISOString(),
+      chatter: []
     };
+    newCustomer.chatter!.push({
+      id: 'cht_' + Math.random().toString(36).substr(2, 9),
+      user: 'Staff',
+      action: 'created',
+      detail: `Created new customer record for "${newCustomer.name}" with email "${newCustomer.email || 'N/A'}" and phone "${newCustomer.phone || 'N/A'}".`,
+      timestamp: new Date().toISOString()
+    });
     this.data.customers.push(newCustomer);
     this.save();
     return newCustomer;
+  }
+
+  updateCustomer(tenantId: string, id: string, updates: Partial<Customer>): Customer | undefined {
+    const index = this.data.customers.findIndex(c => c.id === id && c.tenant_id === tenantId);
+    if (index === -1) return undefined;
+
+    const oldCustomer = this.data.customers[index];
+    const changelog: string[] = [];
+
+    if (updates.name && updates.name !== oldCustomer.name) {
+      changelog.push(`Name changed from "${oldCustomer.name}" to "${updates.name}"`);
+    }
+    if (updates.email && updates.email !== oldCustomer.email) {
+      changelog.push(`Email changed from "${oldCustomer.email || 'None'}" to "${updates.email}"`);
+    }
+    if (updates.phone && updates.phone !== oldCustomer.phone) {
+      changelog.push(`Phone changed from "${oldCustomer.phone || 'None'}" to "${updates.phone}"`);
+    }
+    if (updates.dob && updates.dob !== oldCustomer.dob) {
+      changelog.push(`Date of Birth changed from "${oldCustomer.dob || 'None'}" to "${updates.dob}"`);
+    }
+
+    const updatedCustomer = {
+      ...oldCustomer,
+      ...updates,
+    };
+
+    if (!updatedCustomer.chatter) {
+      updatedCustomer.chatter = [];
+    }
+
+    if (changelog.length > 0) {
+      updatedCustomer.chatter.push({
+        id: 'cht_' + Math.random().toString(36).substr(2, 9),
+        user: 'Staff',
+        action: 'update',
+        detail: changelog.join(', '),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    this.data.customers[index] = updatedCustomer;
+    this.save();
+    return updatedCustomer;
+  }
+
+  addChatterComment(tenantId: string, type: 'products' | 'customers', recordId: string, user: string, comment: string): boolean {
+    if (type === 'products') {
+      const prod = this.getProduct(tenantId, recordId);
+      if (prod) {
+        if (!prod.chatter) prod.chatter = [];
+        prod.chatter.push({
+          id: 'cht_' + Math.random().toString(36).substr(2, 9),
+          user,
+          action: 'comment',
+          detail: comment,
+          timestamp: new Date().toISOString()
+        });
+        this.save();
+        return true;
+      }
+    } else if (type === 'customers') {
+      const cust = this.data.customers.find(c => c.id === recordId && c.tenant_id === tenantId);
+      if (cust) {
+        if (!cust.chatter) cust.chatter = [];
+        cust.chatter.push({
+          id: 'cht_' + Math.random().toString(36).substr(2, 9),
+          user,
+          action: 'comment',
+          detail: comment,
+          timestamp: new Date().toISOString()
+        });
+        this.save();
+        return true;
+      }
+    }
+    return false;
   }
 
   // Transactions
@@ -408,7 +553,6 @@ class DatabaseStore {
     for (const item of newTransaction.items) {
       const product = this.getProduct(tenantId, item.product_id);
       if (product) {
-        // if purchase is in cases, deduct case count * bottles_per_case
         const bottlesToDeduct = item.is_case_purchase 
           ? item.quantity * product.bottles_per_case 
           : item.quantity;
@@ -416,10 +560,24 @@ class DatabaseStore {
         const newBottles = Math.max(0, product.inventory_bottles - bottlesToDeduct);
         const newCases = Math.floor(newBottles / product.bottles_per_case);
 
+        const oldBottles = product.inventory_bottles;
+
         this.updateProduct(tenantId, item.product_id, {
           inventory_bottles: newBottles,
           inventory_cases: newCases,
         });
+
+        const updatedProduct = this.getProduct(tenantId, item.product_id);
+        if (updatedProduct) {
+          if (!updatedProduct.chatter) updatedProduct.chatter = [];
+          updatedProduct.chatter.push({
+            id: 'cht_' + Math.random().toString(36).substr(2, 9),
+            user: 'Automated POS System',
+            action: 'sale_deducted',
+            detail: `Deducted ${bottlesToDeduct} bottles from stock due to customer checkout (Sale #${newTransaction.id}). Stock decreased from ${oldBottles} to ${newBottles} bottles.`,
+            timestamp: new Date().toISOString()
+          });
+        }
       }
     }
 
