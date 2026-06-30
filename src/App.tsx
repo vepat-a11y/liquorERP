@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Package, FileText, Sun, Moon, 
   Layers, RefreshCw, AlertCircle, ShieldCheck, CheckCircle2, ChevronRight, Store, Percent,
-  Menu, ChevronLeft, Truck, Megaphone, DollarSign, Printer, Globe, User, Users, Tag, Lock, Laptop, Key, Fingerprint, Check
+  Menu, ChevronLeft, Truck, Megaphone, DollarSign, Printer, Globe, User, Users, Tag, Lock, Laptop, Key, Fingerprint, Check, Search, Home, Activity, X, Settings as SettingsIcon
 } from 'lucide-react';
 import Register from './components/Register';
 import Inventory from './components/Inventory';
@@ -114,6 +114,11 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [activeRole, setActiveRole] = useState<'Admin' | 'Manager' | 'Cashier'>('Admin');
 
+  // Shopify Navigation & Search States
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [isCommandSearchOpen, setIsCommandSearchOpen] = useState<boolean>(false);
+  const [commandSearchQuery, setCommandSearchQuery] = useState<string>('');
+
   // Employee Governance States
   const [users, setUsers] = useState<SettingsUser[]>(() => {
     const saved = localStorage.getItem('aura_pos_users_list');
@@ -186,6 +191,10 @@ export default function App() {
         e.preventDefault();
         showToast('[F10] CASH DRAWER TRIPPED: Solenoid fired [USB-PORT3]', 'success');
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandSearchOpen(prev => !prev);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -196,8 +205,12 @@ export default function App() {
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('aura_pos_active_user', JSON.stringify(currentUser));
-    setActiveRole(currentUser.role);
+    if (currentUser) {
+      localStorage.setItem('aura_pos_active_user', JSON.stringify(currentUser));
+      setActiveRole(currentUser.role || 'Admin');
+    } else {
+      setActiveRole('Admin');
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -397,292 +410,408 @@ export default function App() {
     }
   }, [theme]);
 
-  const handleTenantChange = (tid: string) => {
-    setActiveTenantId(tid);
-    const selected = tenants.find(t => t.id === tid);
-    if (selected) {
-      showToast(`Clerk session switch: Loaded database workspace for ${selected.name}`, 'info');
-    }
+  // Computed states for Shopify Omnipresent Search Bar
+  const query = commandSearchQuery.toLowerCase().trim();
+  
+  // Filter products matching query
+  const matchedProducts = query.length >= 1 
+    ? products.filter(p => 
+        p.name.toLowerCase().includes(query) ||
+        p.category.toLowerCase().includes(query) ||
+        (p.distributor_sku && p.distributor_sku.toLowerCase().includes(query)) ||
+        (p.barcode && p.barcode.toLowerCase().includes(query)) ||
+        (p.vendor && p.vendor.toLowerCase().includes(query))
+      ).slice(0, 5)
+    : [];
+
+  // Filter Transactions/Customers matching query
+  const matchedTransactions = query.length >= 1
+    ? transactions.filter(t =>
+        (t.customer_name && t.customer_name.toLowerCase().includes(query)) ||
+        t.id.toLowerCase().includes(query) ||
+        t.payment_method.toLowerCase().includes(query) ||
+        t.items.some(item => item.product_name.toLowerCase().includes(query))
+      ).slice(0, 3)
+    : [];
+
+  // System navigation triggers & actions
+  const systemActions = [
+    { label: "SaaS POS Cashier Register", tab: "register" as const, desc: "Open retail Point of Sale register screen", icon: <ShoppingBag className="h-4 w-4" /> },
+    { label: "Products Inventory Catalog", tab: "inventory" as const, desc: "Check stock levels, categories, pricing, specs", icon: <Package className="h-4 w-4" /> },
+    { label: "Transactions & Sales database", tab: "history" as const, desc: "Review receipts, customer records, global database", icon: <FileText className="h-4 w-4" /> },
+    { label: "Promotions & Automatic Discounts", tab: "discounts" as const, desc: "Manage bulk wine/spirits and coupon rules", icon: <Percent className="h-4 w-4" /> },
+    { label: "Purchases & Reorder Logs", tab: "purchases" as const, desc: "View wholesale purchases and supplier orders", icon: <Truck className="h-4 w-4" /> },
+    { label: "Marketing Campaigns", tab: "marketing" as const, desc: "E-blast discounts and customer messaging feeds", icon: <Megaphone className="h-4 w-4" /> },
+    { label: "Print Label Designer", tab: "print" as const, desc: "Generate print layouts and barcoded hangtags", icon: <Printer className="h-4 w-4" /> },
+    { label: "Omnichannel Integrations", tab: "integrations" as const, desc: "Check UberEats, DoorDash, and delivery settings", icon: <Globe className="h-4 w-4" /> },
+    { label: "Online Store Website Builder", tab: "website" as const, desc: "Build store templates, themes, blogs, and settings", icon: <Laptop className="h-4 w-4" /> },
+    { label: "Settings & System Governance", tab: "settings" as const, desc: "Manage employee logins, role rights, security PINs", icon: <Users className="h-4 w-4" /> },
+  ];
+
+  const matchedActions = query.length >= 1
+    ? systemActions.filter(a => 
+        a.label.toLowerCase().includes(query) || 
+        a.desc.toLowerCase().includes(query)
+      )
+    : systemActions.slice(0, 4); // default actions
+
+  const handleSelectSearchProduct = (pId: string) => {
+    setSelectedProductId(pId);
+    setActiveTab('inventory');
+    setIsCommandSearchOpen(false);
+    setCommandSearchQuery('');
+    showToast(`Navigated to catalog details for: ${products.find(p => p.id === pId)?.name || 'Product'}`, 'success');
+  };
+
+  const handleSelectSearchAction = (tabName: any) => {
+    setActiveTab(tabName);
+    setIsCommandSearchOpen(false);
+    setCommandSearchQuery('');
+    showToast(`Navigated to: ${tabName.toUpperCase()} screen`, 'info');
+  };
+
+  const handleSelectSearchTransaction = (tId: string) => {
+    setActiveTab('history');
+    setIsCommandSearchOpen(false);
+    setCommandSearchQuery('');
+    showToast(`Loaded transaction: ${tId}`, 'success');
   };
 
   return (
-    <div className="h-screen w-screen bg-[#f8f7f4] dark:bg-[#121212] text-[#1a1a1a] dark:text-[#f8f7f4] font-sans select-none flex flex-col overflow-hidden transition-colors duration-300">
+    <div className="h-screen w-screen bg-[#f4f4f5] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-50 font-sans select-none flex flex-row overflow-hidden transition-colors duration-300">
       
-      <div className="flex-1 flex flex-row overflow-hidden">
-        
-        {/* 1. LEFT FIXED SIDEBAR */}
-        <header className={`${isSidebarCollapsed ? 'w-16 px-2 py-4' : 'w-56 px-4 py-6'} border-r border-[#1a1a1a]/10 dark:border-[#f8f7f4]/10 flex flex-col bg-white dark:bg-[#121212] shrink-0 transition-all duration-300 justify-between h-full overflow-y-auto`}>
-        <div className="space-y-6">
-          {/* Logo & Collapse Button */}
-          <div className="flex items-center justify-between border-b border-[#1a1a1a]/10 dark:border-[#f8f7f4]/10 pb-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 bg-[#1a1a1a] dark:bg-white text-white dark:text-[#1a1a1a] rounded flex items-center justify-center font-bold text-sm tracking-tighter shadow-sm shrink-0">
-                M
+      {/* 1. SHOPIFY-STYLE LEFT FIXED SIDEBAR */}
+      <aside className={`${isSidebarCollapsed ? 'w-16 px-2.5' : 'w-60 px-4'} border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#111113] flex flex-col shrink-0 transition-all duration-300 justify-between h-full py-4 select-none`}>
+        <div className="space-y-5 flex-1 flex flex-col overflow-hidden">
+          
+          {/* Top Branding Section */}
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-850 pb-3.5 shrink-0">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="h-9 w-9 bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 rounded-xl flex items-center justify-center font-serif italic font-bold text-lg shadow-sm shrink-0 border border-zinc-200 dark:border-zinc-800">
+                A
               </div>
               {!isSidebarCollapsed && (
-                <span className="font-sans font-black text-sm uppercase tracking-widest text-zinc-900 dark:text-white">
-                  MODULE<span className="text-[#d97706] font-normal font-mono">.</span>
-                </span>
+                <div className="flex flex-col text-left leading-tight truncate">
+                  <span className="font-sans font-black text-[11px] uppercase tracking-wider text-zinc-900 dark:text-white">
+                    Aura Commerce
+                  </span>
+                  <span className="text-[9px] font-mono font-medium text-zinc-400 dark:text-zinc-500">
+                    SaaS Suite Admin
+                  </span>
+                </div>
               )}
             </div>
             
             <button
               onClick={() => setIsSidebarCollapsed(prev => !prev)}
-              className="p-1.5 rounded border border-[#1a1a1a]/10 dark:border-[#f8f7f4]/10 hover:border-[#1a1a1a] dark:hover:border-white text-zinc-400 hover:text-[#1a1a1a] dark:hover:text-white transition-all cursor-pointer shrink-0"
+              className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-850 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-all cursor-pointer shrink-0"
               title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
-              <Menu className="h-4 w-4" />
+              {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </button>
           </div>
 
-          {/* Navigation links - styled vertically */}
-          <div className="space-y-1.5">
-            <nav className="flex flex-col gap-1 text-xs font-semibold tracking-tight">
-              
-              {/* Register */}
-              {(rolePermissions[currentUser.role]?.['register'] || 'Admin') !== 'No Access' && (
-                <button
-                  onClick={() => setActiveTab('register')}
-                  title="01. REGISTER"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
-                    activeTab === 'register' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                  }`}
-                >
-                  <ShoppingBag className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">REGISTER</span>}
-                </button>
-              )}
+          {/* Quick Search trigger button (Visible on collapse state) */}
+          {isSidebarCollapsed && (
+            <button
+              onClick={() => setIsCommandSearchOpen(true)}
+              className="w-full p-2.5 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 hover:border-[#d97706] dark:hover:border-[#d97706] text-zinc-400 hover:text-[#d97706] flex items-center justify-center transition cursor-pointer"
+              title="Search console (Ctrl+K)"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          )}
 
-              {/* Products */}
-              {(rolePermissions[currentUser.role]?.['inventory'] || 'Admin') !== 'No Access' && (
+          {/* Navigation links grouped in standard Shopify groups */}
+          <nav className="flex-1 overflow-y-auto pr-1 space-y-6">
+            
+            {/* Group 1: Administration core */}
+            <div className="space-y-1.5">
+              {!isSidebarCollapsed && (
+                <h4 className="text-[9px] font-mono font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest pl-3 select-none">
+                  Core Admin
+                </h4>
+              )}
+              
+              {/* Products Catalog */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['inventory'] || 'Admin') !== 'No Access' && (
                 <button
                   onClick={() => setActiveTab('inventory')}
-                  title="PRODUCT CATALOG"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
                     activeTab === 'inventory' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
-                  <Package className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRODUCTS</span>}
+                  <Package className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'inventory' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Products</span>}
                 </button>
               )}
 
-              {/* Reports */}
-              {(rolePermissions[currentUser.role]?.['history'] || 'Admin') !== 'No Access' && (
+              {/* Transactions & Analytics */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['history'] || 'Admin') !== 'No Access' && (
                 <button
                   onClick={() => setActiveTab('history')}
-                  title="ANALYTICS & DATABASE"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
                     activeTab === 'history' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
-                  <FileText className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">TRANSACTIONS</span>}
+                  <FileText className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'history' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Transactions</span>}
                 </button>
               )}
 
-              {/* Discounts */}
-              {(rolePermissions[currentUser.role]?.['discounts'] || 'Admin') !== 'No Access' && (
-                <button
-                  onClick={() => setActiveTab('discounts')}
-                  title="OFFERS & CAMPAIGNS"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
-                    activeTab === 'discounts' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                  }`}
-                >
-                  <Percent className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PROMOTIONS</span>}
-                </button>
-              )}
-
-              {/* Purchases */}
-              {(rolePermissions[currentUser.role]?.['purchases'] || 'Admin') !== 'No Access' && (
+              {/* Purchases & Logistics */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['purchases'] || 'Admin') !== 'No Access' && (
                 <button
                   onClick={() => setActiveTab('purchases')}
-                  title="LOGISTICS & ORDERS"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
                     activeTab === 'purchases' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
-                  <Truck className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PURCHASES</span>}
+                  <Truck className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'purchases' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Purchases</span>}
                 </button>
               )}
 
-              {/* Marketing */}
-              {(rolePermissions[currentUser.role]?.['marketing'] || 'Admin') !== 'No Access' && (
+              {/* Promotions & Deals */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['discounts'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('discounts')}
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
+                    activeTab === 'discounts' 
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Percent className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'discounts' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Promotions</span>}
+                </button>
+              )}
+
+              {/* Marketing Campaigns */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['marketing'] || 'Admin') !== 'No Access' && (
                 <button
                   onClick={() => setActiveTab('marketing')}
-                  title="PUBLIC MARKETING"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
                     activeTab === 'marketing' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)]' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
-                  <Megaphone className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">MARKETING</span>}
+                  <Megaphone className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'marketing' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Marketing</span>}
                 </button>
               )}
 
-              {/* Print Material */}
-              {(rolePermissions[currentUser.role]?.['print'] || 'Admin') !== 'No Access' && (
+            </div>
+
+            {/* Group 2: Sales Channels */}
+            <div className="space-y-1.5">
+              {!isSidebarCollapsed && (
+                <h4 className="text-[9px] font-mono font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest pl-3 select-none">
+                  Sales Channels
+                </h4>
+              )}
+
+              {/* POS Register */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['register'] || 'Admin') !== 'No Access' && (
                 <button
-                  onClick={() => setActiveTab('print')}
-                  title="PRINT DESIGNER"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
-                    activeTab === 'print' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                  onClick={() => setActiveTab('register')}
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
+                    activeTab === 'register' 
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
-                  <Printer className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">PRINTING</span>}
+                  <ShoppingBag className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'register' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">POS Register</span>}
+                </button>
+              )}
+
+              {/* Website Builder / Online Store */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['website'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('website')}
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
+                    activeTab === 'website' 
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Laptop className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'website' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Online Store</span>}
+                </button>
+              )}
+
+              {/* Print Labels */}
+              {(rolePermissions[currentUser?.role || 'Admin']?.['print'] || 'Admin') !== 'No Access' && (
+                <button
+                  onClick={() => setActiveTab('print')}
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
+                    activeTab === 'print' 
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Printer className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'print' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Print Designer</span>}
                 </button>
               )}
 
               {/* Integrations */}
-              {(rolePermissions[currentUser.role]?.['integrations'] || 'Admin') !== 'No Access' && (
+              {(rolePermissions[currentUser?.role || 'Admin']?.['integrations'] || 'Admin') !== 'No Access' && (
                 <button
                   onClick={() => setActiveTab('integrations')}
-                  title="CLOUD INTEGRATIONS"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
+                  className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
                     activeTab === 'integrations' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
+                      ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
-                  <Globe className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">INTEGRATIONS</span>}
+                  <Globe className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'integrations' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+                  {!isSidebarCollapsed && <span className="font-sans text-[11px] font-semibold tracking-tight">Integrations</span>}
                 </button>
               )}
 
-              {/* Online Store Website Builder */}
-              {(rolePermissions[currentUser.role]?.['website'] || 'Admin') !== 'No Access' && (
-                <button
-                  onClick={() => setActiveTab('website')}
-                  title="ONLINE STORE"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
-                    activeTab === 'website' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                  }`}
-                >
-                  <Laptop className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">ONLINE STORE</span>}
-                </button>
-              )}
+            </div>
 
-              {/* Settings & User Rights */}
-              {(rolePermissions[currentUser.role]?.['settings'] || 'Admin') !== 'No Access' && (
-                <button
-                  onClick={() => setActiveTab('settings')}
-                  title="SYSTEM SETTINGS"
-                  className={`w-full py-3 px-3 transition-all duration-200 cursor-pointer text-left flex items-center gap-3 ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                  } ${
-                    activeTab === 'settings' 
-                      ? 'bg-white dark:bg-[#1c1c1c] text-[#1a1a1a] dark:text-white font-bold border border-[#1a1a1a] dark:border-white shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:shadow-[3px_3px_0px_rgba(248,247,244,1)] font-bold' 
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#1c1c1c] hover:text-[#1a1a1a] dark:hover:text-white border border-transparent hover:border-[#1a1a1a] dark:hover:border-white hover:shadow-[3px_3px_0px_rgba(26,26,26,1)] dark:hover:shadow-[3px_3px_0px_rgba(248,247,244,1)]'
-                  }`}
-                >
-                  <Users className="h-4 w-4 shrink-0" />
-                  {!isSidebarCollapsed && <span className="font-sans text-[10px] uppercase tracking-widest font-black">SETTINGS</span>}
-                </button>
-              )}
-
-            </nav>
-          </div>
+          </nav>
         </div>
 
-        {/* Sidebar Footer Controls */}
-        <div className="space-y-4 pt-4 border-t border-[#e4e4e7] dark:border-[#27272a]">
-          {!isSidebarCollapsed && (
-            <div className="bg-zinc-50 dark:bg-[#18181b] border border-[#1a1a1a]/10 dark:border-white/10 p-3 rounded-xl space-y-2">
-              <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400">
-                <span className="uppercase font-bold tracking-wider">Active Staff</span>
-                <span className="bg-[#d97706]/15 text-[#d97706] px-1.5 py-0.5 rounded text-[8px] font-bold font-mono uppercase">{currentUser.role}</span>
-              </div>
-              <div className="flex items-center justify-between gap-1">
-                <div className="truncate">
-                  <p className="text-[11px] font-bold text-zinc-900 dark:text-white truncate max-w-[100px]" title={currentUser.name}>
-                    {currentUser.name}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsLocked(true)}
-                  className="p-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-red-500 hover:text-white text-zinc-600 dark:text-zinc-300 rounded-lg transition-all cursor-pointer shrink-0"
-                  title="Lock Workstation Console [F12]"
-                >
-                  <Lock className="h-3 w-3" />
-                </button>
-              </div>
-            </div>
+        {/* Group 3: Isolated Settings button at the bottom exactly as Shopify does */}
+        <div className="pt-3 border-t border-zinc-150 dark:border-zinc-850 shrink-0 space-y-3.5">
+          {(rolePermissions[currentUser?.role || 'Admin']?.['settings'] || 'Admin') !== 'No Access' && (
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`w-full py-2.5 px-3 rounded-lg transition-all duration-150 cursor-pointer text-left flex items-center gap-3 ${
+                activeTab === 'settings' 
+                  ? 'bg-zinc-100 dark:bg-zinc-900 text-zinc-950 dark:text-white font-bold border border-zinc-200 dark:border-zinc-800 shadow-xs' 
+                  : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-950/40 hover:text-zinc-900 dark:hover:text-white'
+              }`}
+              title="Aura System Settings"
+            >
+              <SettingsIcon className={`h-4.5 w-4.5 shrink-0 ${activeTab === 'settings' ? 'text-[#d97706]' : 'text-zinc-400 dark:text-zinc-500'}`} />
+              {!isSidebarCollapsed && <span className="font-sans text-[11px] font-bold tracking-tight">Settings</span>}
+            </button>
           )}
 
-          {/* Theme Toggler & Date */}
-          <div className={`flex items-center ${isSidebarCollapsed ? 'flex-col gap-3 justify-center' : 'justify-between'} pt-1`}>
+          {/* Theme Switcher */}
+          <div className="flex items-center gap-1.5 w-full">
             <button
               onClick={() => setTheme(prev => prev === 'light' ? 'dark' : prev === 'dark' ? 'system' : 'light')}
-              className="p-2 rounded-xl border border-[#e4e4e7] dark:border-[#27272a] bg-white dark:bg-[#18181b] hover:bg-zinc-100 dark:hover:bg-zinc-800 text-[#71717a] dark:text-[#a1a1aa] transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold w-full"
-              title="Toggle Theme: Light / Dark / System"
+              className="w-full flex items-center justify-center gap-2 p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-850 text-zinc-500 dark:text-zinc-400 transition-all cursor-pointer text-xs font-semibold"
+              title="Change Theme preset"
             >
               {theme === 'dark' ? (
                 <>
-                  <Moon className="h-3.5 w-3.5" />
-                  {!isSidebarCollapsed && <span className="text-[10px] uppercase font-mono tracking-wider">Dark</span>}
+                  <Moon className="h-3.5 w-3.5 text-zinc-400" />
+                  {!isSidebarCollapsed && <span className="text-[10px] font-mono uppercase tracking-wider">Dark Mode</span>}
                 </>
               ) : theme === 'light' ? (
                 <>
-                  <Sun className="h-3.5 w-3.5" />
-                  {!isSidebarCollapsed && <span className="text-[10px] uppercase font-mono tracking-wider">Light</span>}
+                  <Sun className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                  {!isSidebarCollapsed && <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-600">Light Mode</span>}
                 </>
               ) : (
                 <>
-                  <RefreshCw className="h-3.5 w-3.5 text-amber-500 animate-spin-slow" />
-                  {!isSidebarCollapsed && <span className="text-[10px] uppercase font-mono tracking-wider text-amber-500">System</span>}
+                  <RefreshCw className="h-3.5 w-3.5 text-indigo-500 animate-spin-slow" />
+                  {!isSidebarCollapsed && <span className="text-[10px] font-mono uppercase tracking-wider text-indigo-500">Auto Mode</span>}
                 </>
               )}
             </button>
-            {!isSidebarCollapsed && (
-              <span className="text-[#71717a] dark:text-[#a1a1aa] font-mono text-[10px] tabular-nums whitespace-nowrap pl-2">2026-06-26</span>
-            )}
           </div>
         </div>
-      </header>
+      </aside>
 
-      {/* RIGHT CONTENT WORKSPACE AREA */}
+      {/* RIGHT SIDE AREA (TOPBAR + CONTENT PANEL + LOWER FOOTER) */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#fafafa] dark:bg-[#09090b]">
         
-        {/* 2. MAIN WORKSPACE */}
+        {/* 1.5 OMNIPRESENT SHOPIFY TOP HEADER BAR */}
+        <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#111113] flex items-center justify-between px-6 shrink-0 select-none z-10">
+          
+          {/* Left Portion: Tenant / Workspace Selector */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Store className="h-4 w-4 text-[#d97706]" />
+              <span className="text-[10px] font-mono font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500 hidden md:inline">
+                Workspace:
+              </span>
+            </div>
+            
+            {/* Tenant Select Custom Dropdown */}
+            <div className="relative">
+              <select
+                value={activeTenantId}
+                onChange={(e) => setActiveTenantId(e.target.value)}
+                className="appearance-none bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 rounded-xl px-3.5 py-1.5 pr-9 text-xs font-bold text-zinc-800 dark:text-zinc-100 focus:outline-none focus:border-[#d97706] cursor-pointer shadow-xs min-w-[150px] sm:min-w-[190px] transition-colors"
+              >
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-zinc-400">
+                <ChevronRight className="h-3 w-3 rotate-90" />
+              </div>
+            </div>
+          </div>
+
+          {/* Middle Portion: Universal Shopify Search Bar */}
+          <div className="flex-1 max-w-md mx-6 hidden sm:block">
+            <button
+              onClick={() => setIsCommandSearchOpen(true)}
+              className="w-full flex items-center justify-between bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 px-3.5 py-2 rounded-xl text-zinc-400 cursor-pointer shadow-xs transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <Search className="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
+                <span className="text-[11px] font-sans text-zinc-400 dark:text-zinc-500 font-medium">Search products, receipts, settings...</span>
+              </div>
+              <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-bold text-zinc-400 bg-zinc-200/50 dark:bg-zinc-800 rounded border border-zinc-300/30">
+                Ctrl + K
+              </kbd>
+            </button>
+          </div>
+
+          {/* Right Portion: Active Employee Card & Clock */}
+          <div className="flex items-center gap-4">
+            
+            {/* Employee Info Card */}
+            <div className="flex items-center gap-2 bg-zinc-50 dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-850 px-2.5 py-1 rounded-xl">
+              <div className="h-5.5 w-5.5 bg-[#d97706]/10 text-[#d97706] border border-[#d97706]/20 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 font-serif italic">
+                {currentUser?.name?.[0] || 'A'}
+              </div>
+              <div className="text-left leading-none hidden lg:block select-none">
+                <p className="text-[10px] font-bold text-zinc-850 dark:text-zinc-100">{currentUser?.name?.split(' (')?.[0] || 'Active User'}</p>
+                <span className="text-[8px] font-mono text-[#d97706] uppercase tracking-wider font-extrabold">{currentUser?.role || 'Admin'}</span>
+              </div>
+            </div>
+
+            {/* Quick Screen Lock Padlock */}
+            <button
+              onClick={() => setIsLocked(true)}
+              className="p-1.5 border border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#18181b] hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-500/20 hover:text-red-500 dark:hover:text-red-500 text-zinc-400 rounded-lg transition-all cursor-pointer shadow-xs"
+              title="Lock Console (F12)"
+            >
+              <Lock className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Dynamic System Time clock */}
+            <div className="hidden xl:flex flex-col items-end leading-none font-mono text-[9px] text-zinc-400 dark:text-zinc-500 gap-0.5 select-none pr-1">
+              <span className="font-bold">{currentTime.split(' ')[0]}</span>
+              <span className="text-zinc-500">{currentTime.split(' ')[1]}</span>
+            </div>
+
+          </div>
+
+        </header>
+
+        {/* 2. MAIN ACTIVE COMPONENT VIEWPORT */}
         <main className="flex-1 flex overflow-hidden">
           
           {isLoading ? (
@@ -702,7 +831,7 @@ export default function App() {
               {/* Cashier Guard for restricted views */}
               {activeRole === 'Cashier' && ['inventory', 'purchases', 'settings'].includes(activeTab) ? (
                 <div className="flex-1 flex flex-col items-center justify-center bg-white dark:bg-[#09090b] text-center p-8 space-y-4">
-                  <div className="h-16 w-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center">
+                  <div className="h-16 w-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center border border-red-500/15">
                     <Lock className="h-8 w-8 stroke-[1.5]" />
                   </div>
                   <div>
@@ -715,7 +844,7 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => setActiveTab('settings')}
-                    className="bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 px-4 py-2 rounded-xl text-xs font-bold"
+                    className="bg-zinc-950 dark:bg-white hover:bg-[#d97706] dark:hover:bg-[#d97706] text-white dark:text-zinc-950 hover:text-white py-2.5 px-5 transition cursor-pointer rounded-xl text-xs font-bold font-mono uppercase tracking-wider shadow-sm border border-transparent"
                   >
                     Go to User Settings
                   </button>
@@ -731,11 +860,11 @@ export default function App() {
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
                       discountRules={discountRules}
-                      activeUserId={currentUser.id}
-                      activeUser={currentUser.name}
+                      activeUserId={currentUser?.id || 'usr_1'}
+                      activeUser={currentUser?.name || 'Elena Rostova'}
                     />
                   )}
-
+ 
                   {activeTab === 'inventory' && (
                     <Inventory 
                       tenantId={activeTenantId} 
@@ -743,11 +872,13 @@ export default function App() {
                       products={products}
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
-                      permissionLevel={rolePermissions[currentUser.role]?.['inventory'] || 'Admin'}
-                      activeUser={currentUser.name}
+                      permissionLevel={rolePermissions[currentUser?.role || 'Admin']?.['inventory'] || 'Admin'}
+                      activeUser={currentUser?.name || 'Elena Rostova'}
+                      selectedProductId={selectedProductId}
+                      setSelectedProductId={setSelectedProductId}
                     />
                   )}
-
+ 
                   {activeTab === 'history' && (
                     <History 
                       tenantId={activeTenantId} 
@@ -756,11 +887,11 @@ export default function App() {
                       customers={customers}
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
-                      permissionLevel={rolePermissions[currentUser.role]?.['history'] || 'Admin'}
-                      activeUser={currentUser.name}
+                      permissionLevel={rolePermissions[currentUser?.role || 'Admin']?.['history'] || 'Admin'}
+                      activeUser={currentUser?.name || 'Elena Rostova'}
                     />
                   )}
-
+ 
                   {activeTab === 'discounts' && (
                     <Discounts 
                       theme={theme} 
@@ -769,17 +900,17 @@ export default function App() {
                       showToast={showToast}
                     />
                   )}
-
+ 
                   {activeTab === 'purchases' && (
                     <Purchases
                       tenantId={activeTenantId}
                       products={products}
                       refreshData={() => fetchTenantData(activeTenantId)}
                       showToast={showToast}
-                      permissionLevel={rolePermissions[currentUser.role]?.['purchases'] || 'Admin'}
+                      permissionLevel={rolePermissions[currentUser?.role || 'Admin']?.['purchases'] || 'Admin'}
                     />
                   )}
-
+ 
                   {activeTab === 'marketing' && (
                     <Marketing
                       customers={customers}
@@ -788,14 +919,14 @@ export default function App() {
                       showToast={showToast}
                     />
                   )}
-
+ 
                   {activeTab === 'print' && (
                     <PrintMaterial
                       products={products}
                       showToast={showToast}
                     />
                   )}
-
+ 
                   {activeTab === 'integrations' && (
                     <Integrations
                       tenantId={activeTenantId}
@@ -807,7 +938,7 @@ export default function App() {
                       setIncomingOrders={setIncomingOrders}
                     />
                   )}
-
+ 
                   {activeTab === 'website' && (
                     <WebsiteBuilder
                       tenantId={activeTenantId}
@@ -818,7 +949,7 @@ export default function App() {
                       showToast={showToast}
                     />
                   )}
-
+ 
                   {activeTab === 'settings' && (
                     <Settings
                       currentUser={currentUser}
@@ -834,21 +965,192 @@ export default function App() {
               )}
             </div>
           )}
-
+ 
         </main>
-
-        {/* 3. FOOTER */}
-        <footer className="h-10 bg-white dark:bg-[#1a1a1a] border-t-2 border-[#1a1a1a] dark:border-[#f8f7f4] px-6 flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-zinc-600 dark:text-zinc-400 shrink-0 select-none">
-          <div>CORE ACCESS: {activeRole.toUpperCase()} // LEVEL 04</div>
-          <div className="flex gap-6">
+ 
+        {/* 3. PREMIUM LOWER CONSOLE FOOTER */}
+        <footer className="h-10 bg-white dark:bg-[#111113] border-t border-zinc-200 dark:border-zinc-800 px-6 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-500 shrink-0 select-none">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Console Access: {(activeRole || 'Admin').toUpperCase()} // WORKSPACE AT {activeTenant?.name?.toUpperCase() || 'LOADING...'}</span>
+          </div>
+          <div className="flex gap-6 font-semibold">
             <span>[F10] CASH DRAWER</span>
             <span>[F12] LOCK CONSOLE</span>
           </div>
         </footer>
-
+ 
       </div>
 
-    </div>
+      {/* 3.4 SHOPIFY INTERACTIVE UNIVERSAL COMMAND SEARCH OVERLAY PALETTE */}
+      {isCommandSearchOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-zinc-950/40 dark:bg-zinc-950/70 backdrop-blur-xs animate-fade-in" onClick={() => setIsCommandSearchOpen(false)}>
+          <div 
+            className="w-full max-w-2xl bg-white dark:bg-[#151518] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden mx-4 flex flex-col max-h-[70vh] animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Search Header Input */}
+            <div className="p-4 border-b border-zinc-150 dark:border-zinc-800 flex items-center gap-3 bg-zinc-50 dark:bg-[#18181b]/60">
+              <Search className="h-5 w-5 text-zinc-400 shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Type to search products, transactions, or navigate..."
+                value={commandSearchQuery}
+                onChange={(e) => setCommandSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent border-none text-zinc-900 dark:text-white focus:outline-none text-sm placeholder-zinc-400 font-sans font-medium"
+              />
+              <button 
+                onClick={() => setIsCommandSearchOpen(false)}
+                className="p-1 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Results Viewport */}
+            <div className="flex-1 overflow-y-auto divide-y divide-zinc-150 dark:divide-zinc-800 scrollbar-thin">
+              
+              {/* Category 1: Navigation Actions */}
+              <div className="p-3 space-y-1.5">
+                <p className="text-[9px] font-mono font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 px-3 py-1">
+                  System Navigation Shortcuts
+                </p>
+                {matchedActions.length === 0 ? (
+                  <p className="text-[11px] font-medium text-zinc-400 px-3 py-1">No action matches</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                    {matchedActions.map((action) => (
+                      <button
+                        key={action.tab}
+                        onClick={() => handleSelectSearchAction(action.tab)}
+                        className="w-full text-left p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900/65 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800 flex items-center gap-3 transition cursor-pointer group"
+                      >
+                        <div className="h-7 w-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 group-hover:bg-[#d97706]/10 text-zinc-500 dark:text-zinc-400 group-hover:text-[#d97706] flex items-center justify-center transition shrink-0">
+                          {action.icon}
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 group-hover:text-[#d97706] transition leading-snug">
+                            {action.label}
+                          </p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate leading-none">
+                            {action.desc}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Category 2: Matching Products */}
+              {query.length >= 1 && (
+                <div className="p-3 space-y-1.5">
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 px-3 py-1">
+                    Matched Catalog Products ({matchedProducts.length})
+                  </p>
+                  {matchedProducts.length === 0 ? (
+                    <div className="text-center py-4 text-zinc-400 text-xs font-mono">
+                      No matching products found
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {matchedProducts.map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleSelectSearchProduct(p.id)}
+                          className="w-full text-left p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900/65 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800 flex items-center justify-between gap-3 transition cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3 truncate">
+                            <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-850 overflow-hidden flex items-center justify-center shrink-0 border border-zinc-200 dark:border-zinc-800">
+                              {p.imageUrl ? (
+                                <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="h-4.5 w-4.5 text-zinc-400" />
+                              )}
+                            </div>
+                            <div className="truncate text-left leading-tight">
+                              <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 group-hover:text-[#d97706] transition">
+                                {p.name}
+                              </p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono mt-0.5">
+                                SKU: {p.distributor_sku || 'N/A'} • {p.category} • {p.vendor || 'No Vendor'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-black text-zinc-800 dark:text-white font-mono">${p.price_per_bottle.toFixed(2)}</p>
+                            <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-mono uppercase font-black mt-1 ${
+                              p.inventory_bottles === 0 
+                                ? 'bg-red-500/10 text-red-500 border border-red-500/15'
+                                : p.inventory_bottles < p.bottles_per_case 
+                                ? 'bg-amber-500/10 text-[#d97706] border border-[#d97706]/15'
+                                : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/15'
+                            }`}>
+                              {p.inventory_bottles} Bts ({Math.floor(p.inventory_bottles / p.bottles_per_case)} Cs)
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Category 3: Matching Transactions & Receipts */}
+              {query.length >= 1 && (
+                <div className="p-3 space-y-1.5">
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 px-3 py-1">
+                    Matched Transactions & Receipts ({matchedTransactions.length})
+                  </p>
+                  {matchedTransactions.length === 0 ? (
+                    <div className="text-center py-4 text-zinc-400 text-xs font-mono">
+                      No matching sales records found
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {matchedTransactions.map((t) => (
+                        <div
+                          key={t.id}
+                          onClick={() => handleSelectSearchTransaction(t.id)}
+                          className="w-full text-left p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900/65 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800 flex items-center justify-between gap-3 transition cursor-pointer group animate-fade-in"
+                        >
+                          <div className="text-left leading-tight truncate">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-mono font-bold text-[#d97706] uppercase">{t.id}</span>
+                              <span className="text-[10px] text-zinc-450 dark:text-zinc-500 font-sans font-medium">• {t.customer_name || 'Guest Checkout'}</span>
+                            </div>
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 truncate">
+                              {t.items.map(i => `${i.quantity}x ${i.product_name}`).join(', ')}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-black text-zinc-850 dark:text-zinc-100 font-mono">${t.total.toFixed(2)}</p>
+                            <span className="text-[8px] font-mono text-zinc-400 uppercase mt-0.5 block">{t.payment_method}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer tips */}
+            <div className="p-3 border-t border-zinc-150 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b]/50 flex justify-between items-center text-[10px] font-mono text-zinc-400 dark:text-zinc-500">
+              <div>
+                <span>Press <span className="font-bold text-zinc-500">ESC</span> to close</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#d97706]"></span>
+                <span>Shopify Omnichannel Search Engine</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* 3.5 CONSOLE LOCK SCREEN OVERLAY */}
       {isLocked && (

@@ -99,7 +99,7 @@ export default function Settings({
   };
 
   // Check if current user is allowed to edit rules (only Admin or Manager)
-  const canEditRules = currentUser.role === 'Admin' || currentUser.role === 'Manager';
+  const canEditRules = (currentUser?.role || 'Admin') === 'Admin' || (currentUser?.role || 'Admin') === 'Manager';
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#f8f7f4] dark:bg-[#121212]">
@@ -222,8 +222,8 @@ export default function Settings({
                   <span className="uppercase font-bold text-[10px] tracking-wider">Active Workspace Session</span>
                 </div>
                 <div className="text-xs">
-                  <p className="font-bold text-[#1a1a1a] dark:text-white">{currentUser.name}</p>
-                  <p className="text-zinc-500 font-mono text-[10px] mt-0.5">Role Level: <span className="text-[#d97706] font-bold">{currentUser.role}</span></p>
+                  <p className="font-bold text-[#1a1a1a] dark:text-white">{currentUser?.name || 'Active User'}</p>
+                  <p className="text-zinc-500 font-mono text-[10px] mt-0.5">Role Level: <span className="text-[#d97706] font-bold">{currentUser?.role || 'Admin'}</span></p>
                 </div>
               </div>
             </div>
@@ -245,21 +245,21 @@ export default function Settings({
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-[#1a1a1a] dark:text-white text-sm">{user.name}</span>
-                        {user.id === currentUser.id && (
+                        {user.id === currentUser?.id && (
                           <span className="bg-[#10b981]/15 text-[#10b981] px-2 py-0.5 rounded text-[8px] font-bold font-mono uppercase border border-[#10b981]/10">You</span>
                         )}
                       </div>
                       <div className="text-[10px] font-mono text-zinc-500 flex items-center gap-4">
                         <span>Role: <b className="text-zinc-700 dark:text-zinc-300 font-sans uppercase">{user.role}</b></span>
-                        <span>PIN Key: <b className="text-zinc-700 dark:text-zinc-300 tracking-widest">{currentUser.role === 'Admin' ? user.pin : '••••'}</b></span>
+                        <span>PIN Key: <b className="text-zinc-700 dark:text-zinc-300 tracking-widest">{(currentUser?.role || 'Admin') === 'Admin' ? user.pin : '••••'}</b></span>
                       </div>
                     </div>
 
                     <button
                       onClick={() => handleDeleteUser(user.id)}
-                      disabled={user.id === currentUser.id}
+                      disabled={user.id === currentUser?.id}
                       className="p-2 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-red-500 hover:border-red-500/30 rounded-lg transition disabled:opacity-30 cursor-pointer"
-                      title={user.id === currentUser.id ? "Cannot delete yourself" : "Delete profile"}
+                      title={user.id === currentUser?.id ? "Cannot delete yourself" : "Delete profile"}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -285,7 +285,7 @@ export default function Settings({
               </p>
               {!canEditRules && (
                 <p className="text-[10px] font-mono text-red-500 font-bold mt-1 uppercase">
-                  ⚠️ View Only: Your current profile level ({currentUser.role}) does not have permission to modify these restrictions. Only Admins and Managers can edit permissions.
+                  ⚠️ View Only: Your current profile level ({currentUser?.role || 'Admin'}) does not have permission to modify these restrictions. Only Admins and Managers can edit permissions.
                 </p>
               )}
             </div>

@@ -3,18 +3,20 @@ import {
   Plus, QrCode, Sparkles, RefreshCw, CheckCircle2, Package, Search, Wine, Lock, 
   ShieldAlert, FileText, Check, Save, MessageSquare, Clock, Calendar, User, 
   ShoppingBag, Download, Upload, X, Eye, HelpCircle, Archive, Trash2, Layers,
-  Settings
+  Settings, ArrowLeft
 } from 'lucide-react';
 import { Product } from '../types';
 
 interface InventoryProps {
   tenantId: string;
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'system';
   products: Product[];
   refreshData: () => void;
   showToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
   permissionLevel: string;
   activeUser: string;
+  selectedProductId?: string | null;
+  setSelectedProductId?: (id: string | null) => void;
 }
 
 export default function Inventory({ 
@@ -24,11 +26,15 @@ export default function Inventory({
   refreshData, 
   showToast,
   permissionLevel = 'Admin',
-  activeUser = 'Staff'
+  activeUser = 'Staff',
+  selectedProductId: propSelectedProductId,
+  setSelectedProductId: propSetSelectedProductId
 }: InventoryProps) {
   
   // Selected Product as an Active Record for Odoo-style Chatter Drawer
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [localSelectedProductId, setLocalSelectedProductId] = useState<string | null>(null);
+  const selectedProductId = propSelectedProductId !== undefined ? propSelectedProductId : localSelectedProductId;
+  const setSelectedProductId = propSetSelectedProductId !== undefined ? propSetSelectedProductId : setLocalSelectedProductId;
 
   // Modal Toggles
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -484,6 +490,358 @@ export default function Inventory({
       return 0;
     });
 
+  // Selected Product detail full page view
+  if (selectedProduct) {
+    const stockStatus = selectedProduct.inventory_bottles === 0 
+      ? 'out' 
+      : (selectedProduct.inventory_bottles < selectedProduct.bottles_per_case ? 'low' : 'good');
+
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden h-full bg-[#f6f6f7] dark:bg-[#0c0c0e] animate-fade-in">
+        {/* Full-Page Product Record Header */}
+        <div className="p-4 bg-white dark:bg-[#111113] border-b border-zinc-200/80 dark:border-zinc-800 shrink-0 flex items-center justify-between gap-4 shadow-[0_1px_2px_rgba(0,0,0,0.01)] z-30">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSelectedProductId(null)}
+              className="p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Catalog
+            </button>
+            <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800" />
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[9px] uppercase bg-[#d97706]/10 text-[#d97706] border border-[#d97706]/20 px-2.5 py-0.5 rounded font-black tracking-widest">
+                Active Product File
+              </span>
+              <span className="font-mono text-[10px] text-zinc-400 font-medium">
+                SKU: {selectedProduct.distributor_sku || 'N/A'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isEditingRecord ? (
+              <button
+                onClick={handleStartEditRecord}
+                disabled={isReadOnly}
+                className="bg-[#d97706] text-white hover:bg-[#b45309] px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              >
+                <Save className="h-4 w-4" />
+                Edit Specifications
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsEditingRecord(false)}
+                className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase transition cursor-pointer"
+              >
+                Cancel Editing
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Full-Page Product Content */}
+        <div className="flex-1 overflow-hidden p-6 flex flex-col lg:flex-row gap-6">
+          {/* Main Specs Column (2/3 width) */}
+          <div className="flex-1 bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col overflow-hidden h-full">
+            <div className="p-4 border-b border-zinc-100 dark:border-zinc-850/60 bg-zinc-50/40 dark:bg-[#131315]/40 shrink-0 flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+                Inventory Specifications & Details
+              </span>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest border ${
+                  selectedProduct.category === 'Liquor' ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200/40' :
+                  selectedProduct.category === 'Wine' ? 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200/40' :
+                  selectedProduct.category === 'Beer' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200/40' :
+                  'bg-zinc-150 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200/60'
+                }`}>
+                  {selectedProduct.category}
+                </span>
+                {selectedProduct.age_restricted && (
+                  <span className="text-[9px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded border border-red-500/15 font-mono font-bold uppercase tracking-wider">
+                    🔞 21+ Required
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Product Profile Row */}
+              <div className="flex flex-col md:flex-row gap-6 items-start">
+                <div className="w-full md:w-48 h-48 rounded-2xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850/60 overflow-hidden flex items-center justify-center shrink-0">
+                  {selectedProduct.imageUrl ? (
+                    <img 
+                      src={selectedProduct.imageUrl} 
+                      alt={selectedProduct.name} 
+                      referrerPolicy="no-referrer" 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <Package className="h-16 w-16 text-zinc-300 dark:text-zinc-700 stroke-[1.25]" />
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-3">
+                  <h2 className="font-serif italic font-bold text-2xl lg:text-3xl text-zinc-900 dark:text-white leading-tight">
+                    {selectedProduct.name}
+                  </h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-sans">
+                    {selectedProduct.description || "No product description recorded."}
+                  </p>
+
+                  <div className="flex flex-wrap gap-4 pt-2">
+                    <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 px-4 py-2 rounded-xl text-center">
+                      <p className="text-[8px] font-mono uppercase text-zinc-400 font-bold">In-Stock Loose</p>
+                      <p className="font-mono text-lg font-black text-zinc-900 dark:text-white">{selectedProduct.inventory_bottles} Bts</p>
+                    </div>
+                    <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 px-4 py-2 rounded-xl text-center">
+                      <p className="text-[8px] font-mono uppercase text-zinc-400 font-bold">In-Stock Cases</p>
+                      <p className="font-mono text-lg font-black text-zinc-900 dark:text-white">
+                        {Math.floor(selectedProduct.inventory_bottles / selectedProduct.bottles_per_case)} Cs
+                      </p>
+                    </div>
+                    <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 px-4 py-2 rounded-xl text-center">
+                      <p className="text-[8px] font-mono uppercase text-zinc-400 font-bold">Stock Status</p>
+                      <span className={`inline-block mt-1 px-2.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-black border ${
+                        stockStatus === 'out' ? 'bg-red-500/10 text-red-500 border-red-500/15' :
+                        stockStatus === 'low' ? 'bg-amber-500/10 text-amber-500 border-amber-500/15' :
+                        'bg-emerald-500/10 text-emerald-500 border-emerald-500/15'
+                      }`}>
+                        {stockStatus === 'out' ? 'Out of Stock' : stockStatus === 'low' ? 'Low Stock' : 'In Stock'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Specs & Info Form / Table */}
+              <div className="border-t border-zinc-100 dark:border-zinc-800 pt-6">
+                {!isEditingRecord ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">Financial Metrics</h4>
+                      <div className="bg-zinc-50 dark:bg-[#141416] border border-zinc-100 dark:border-zinc-850 p-4 rounded-xl space-y-3">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500 font-sans">Retail Bottle Price</span>
+                          <span className="font-mono font-bold text-zinc-900 dark:text-white text-sm">${selectedProduct.price_per_bottle.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500 font-sans">Wholesale Unit Cost</span>
+                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                            {selectedProduct.cost_per_unit ? `$${selectedProduct.cost_per_unit.toFixed(2)}` : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs border-t border-zinc-100 dark:border-zinc-800 pt-2">
+                          <span className="text-zinc-500 font-sans">Gross Margin Estimate</span>
+                          <span className="font-mono font-bold text-zinc-900 dark:text-white">
+                            {selectedProduct.cost_per_unit 
+                              ? `${(((selectedProduct.price_per_bottle - selectedProduct.cost_per_unit) / selectedProduct.price_per_bottle) * 100).toFixed(1)}%`
+                              : 'N/A'
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">Supplier & Identification</h4>
+                      <div className="bg-zinc-50 dark:bg-[#141416] border border-zinc-100 dark:border-zinc-850 p-4 rounded-xl space-y-3">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500 font-sans">Primary Vendor</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-sans">{selectedProduct.vendor || 'No vendor linked'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500 font-sans">Distributor SKU</span>
+                          <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{selectedProduct.distributor_sku || 'No SKU code'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500 font-sans">UPC Barcode</span>
+                          <span className="font-mono text-zinc-800 dark:text-zinc-200">{selectedProduct.barcode || 'No barcode'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 md:col-span-2">
+                      <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">Packaging Specs</h4>
+                      <div className="bg-zinc-50 dark:bg-[#141416] border border-zinc-100 dark:border-zinc-850 p-4 rounded-xl space-y-3">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500 font-sans">Pack Ratio (Bottles per Case)</span>
+                          <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{selectedProduct.bottles_per_case} Bottles / Case</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-zinc-500 font-sans">Age Restriction Policy</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-sans">
+                            {selectedProduct.age_restricted ? '🔞 21+ Age Verification Gate Required' : 'Unrestricted General'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveProductEdit} className="space-y-4 text-xs max-w-2xl">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Product Title</label>
+                        <input
+                          type="text"
+                          value={editFormData.name}
+                          onChange={(e) => setEditFormData(p => ({ ...p, name: e.target.value }))}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs focus:outline-none focus:border-[#d97706] text-zinc-900 dark:text-white font-sans"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Retail Bottle Price ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editFormData.price_per_bottle}
+                          onChange={(e) => setEditFormData(p => ({ ...p, price_per_bottle: parseFloat(e.target.value) || 0 }))}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-[#d97706]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor Wholesale Cost ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editFormData.cost_per_unit}
+                          onChange={(e) => setEditFormData(p => ({ ...p, cost_per_unit: parseFloat(e.target.value) || 0 }))}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-[#d97706]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor SKU</label>
+                        <input
+                          type="text"
+                          value={editFormData.distributor_sku}
+                          onChange={(e) => setEditFormData(p => ({ ...p, distributor_sku: e.target.value }))}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-[#d97706]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Vendor/Distributor Name</label>
+                      <input
+                        type="text"
+                        value={editFormData.vendor}
+                        onChange={(e) => setEditFormData(p => ({ ...p, vendor: e.target.value }))}
+                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-[#d97706] font-sans"
+                      />
+                    </div>
+
+                    <div className="pt-4 flex gap-3 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingRecord(false)}
+                        className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 px-5 py-2.5 rounded-xl font-mono font-bold uppercase text-[10px]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="bg-[#d97706] text-white hover:bg-[#b45309] px-6 py-2.5 rounded-xl font-mono font-bold uppercase text-[10px] tracking-wider transition cursor-pointer"
+                      >
+                        Save Record Details
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Side Chatter Column (1/3 width) */}
+          <div className="w-full lg:w-[380px] xl:w-[420px] bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800 rounded-2xl flex flex-col shadow-[0_2px_12px_rgba(0,0,0,0.02)] overflow-hidden shrink-0 h-full">
+            <div className="p-4 border-b border-zinc-150 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4.5 w-4.5 text-[#d97706]" />
+                <span className="font-serif italic font-semibold text-sm text-zinc-950 dark:text-white font-sans">Record Chatter Timeline</span>
+              </div>
+              <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
+                {selectedProduct.chatter?.length || 0} Events
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {/* Post New Note Form */}
+              <form onSubmit={handlePostChatterComment} className="space-y-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="Type staff log, verification or supplier note..."
+                  value={chatterComment}
+                  onChange={(e) => setChatterComment(e.target.value)}
+                  className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-850 dark:text-zinc-200 focus:outline-none focus:border-[#d97706] placeholder-zinc-400 dark:placeholder-zinc-500 font-sans"
+                />
+                <button
+                  type="submit"
+                  disabled={isPostingComment || !chatterComment.trim()}
+                  className="w-full bg-zinc-950 dark:bg-white hover:bg-[#d97706] dark:hover:bg-[#d97706] text-white dark:text-zinc-950 hover:text-white dark:hover:text-white py-2 rounded-xl font-mono text-[9px] font-bold uppercase transition cursor-pointer disabled:opacity-40"
+                >
+                  Post Note
+                </button>
+              </form>
+
+              {/* Chatter History */}
+              <div className="space-y-4">
+                {(!selectedProduct.chatter || selectedProduct.chatter.length === 0) ? (
+                  <div className="text-center py-6 text-zinc-400 text-[9px] font-mono uppercase tracking-widest bg-zinc-50/50 dark:bg-[#121212]/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    No audited actions logged yet.
+                  </div>
+                ) : (
+                  [...selectedProduct.chatter].reverse().map((cht) => {
+                    let actionColor = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500';
+                    let icon = <Clock className="h-3 w-3" />;
+
+                    if (cht.action === 'created') {
+                      actionColor = 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400';
+                      icon = <Check className="h-3 w-3" />;
+                    } else if (cht.action === 'update') {
+                      actionColor = 'bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400';
+                      icon = <Save className="h-3 w-3" />;
+                    } else if (cht.action === 'inventory_received') {
+                      actionColor = 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400';
+                      icon = <Layers className="h-3 w-3" />;
+                    } else if (cht.action === 'sale_deducted') {
+                      actionColor = 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400';
+                      icon = <ShoppingBag className="h-3 w-3" />;
+                    } else if (cht.action === 'comment') {
+                      actionColor = 'bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400';
+                      icon = <MessageSquare className="h-3 w-3" />;
+                    }
+
+                    return (
+                      <div key={cht.id} className="flex gap-3 text-xs leading-normal">
+                        <div className={`h-6 w-6 rounded-full ${actionColor} flex items-center justify-center shrink-0 mt-0.5`}>
+                          {icon}
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center justify-between text-[9px]">
+                            <span className="font-bold text-zinc-850 dark:text-white font-sans">{cht.user}</span>
+                            <span className="text-zinc-400 font-mono">
+                              {new Date(cht.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed text-[11px] font-sans">
+                            {cht.detail}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden h-full bg-[#f6f6f7] dark:bg-[#0c0c0e]">
       
@@ -639,18 +997,22 @@ export default function Inventory({
         </div>
       </div>
 
-      {/* MAIN CONTAINER: Split view setup between visual grid cards and details panel */}
-      <main className="flex-1 overflow-hidden p-6 flex gap-6">
+      {/* MAIN CONTAINER: tabular row-based directory view */}
+      <main className="flex-1 overflow-hidden p-6">
         
-        {/* PRODUCTS VISUAL CARD CATALOG SECTION */}
-        <div className="flex-1 flex flex-col h-full bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)] overflow-hidden">
+        <div className="flex flex-col h-full bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)] overflow-hidden">
           
-          <div className="p-3.5 border-b border-zinc-100 dark:border-zinc-850/60 bg-zinc-50/40 dark:bg-[#131315]/40 shrink-0 flex items-center justify-between">
-            <span className="text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
-              Catalog Directory Screen
-            </span>
+          <div className="p-4 border-b border-zinc-150 dark:border-zinc-850 bg-zinc-50/50 dark:bg-[#131315]/40 shrink-0 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+                Catalog Directory List View
+              </span>
+              <span className="text-[9px] font-mono font-bold text-[#d97706] bg-[#d97706]/10 px-2 py-0.5 rounded">
+                Unified Grid
+              </span>
+            </div>
             <div className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500">
-              Showing <span className="text-zinc-800 dark:text-white font-bold">{filteredList.length}</span> of {products.length} Products
+              Showing <span className="text-zinc-800 dark:text-white font-black">{filteredList.length}</span> of {products.length} Products
             </div>
           </div>
 
@@ -673,7 +1035,7 @@ export default function Inventory({
                       type="button"
                       onClick={handleImportDemoProducts}
                       disabled={isReadOnly}
-                      className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-mono font-bold text-[10px] uppercase tracking-widest px-4 py-2.5 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-40"
+                      className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 font-mono font-bold text-[10px] uppercase tracking-widest px-4 py-2.5 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-40"
                     >
                       Import Predefined Catalog
                     </button>
@@ -689,13 +1051,21 @@ export default function Inventory({
                 </div>
               </div>
             ) : (
-              <div className={`grid gap-4 transition-all duration-300 ${
-                selectedProductId 
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3' 
-                  : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
-              }`}>
+              <div className="flex flex-col gap-2">
+                {/* Desktop List Header */}
+                <div className="hidden lg:flex items-center justify-between text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-850 bg-zinc-50/30 dark:bg-zinc-950/20 rounded-t-xl select-none">
+                  <div className="w-12 shrink-0">Media</div>
+                  <div className="flex-1 pl-4">Product Name</div>
+                  <div className="w-24 shrink-0 text-left">Category</div>
+                  <div className="w-32 shrink-0 text-left">SKU</div>
+                  <div className="w-32 shrink-0 text-left">Barcode</div>
+                  <div className="w-24 shrink-0 text-right">Retail Price</div>
+                  <div className="w-24 shrink-0 text-right">Stock Level</div>
+                  <div className="w-28 shrink-0 text-right">Status Badge</div>
+                </div>
+
+                {/* List of Products */}
                 {filteredList.map((p) => {
-                  const isSelected = p.id === selectedProductId;
                   const stockStatus = p.inventory_bottles === 0 
                     ? 'out' 
                     : (p.inventory_bottles < p.bottles_per_case ? 'low' : 'good');
@@ -707,35 +1077,10 @@ export default function Inventory({
                         setSelectedProductId(p.id);
                         setIsEditingRecord(false);
                       }}
-                      className={`group bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all duration-200 cursor-pointer relative ${
-                        isSelected 
-                          ? 'ring-2 ring-[#d97706] border-transparent shadow-sm bg-amber-500/[0.01]' 
-                          : 'hover:border-zinc-350 dark:hover:border-zinc-700'
-                      }`}
+                      className="group bg-white dark:bg-[#111113] border border-zinc-200/60 dark:border-zinc-800/60 hover:border-[#d97706] dark:hover:border-[#d97706] hover:shadow-xs rounded-xl p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all duration-150 cursor-pointer"
                     >
-                      {/* Top Row: category and restrictions */}
-                      <div className="flex items-center justify-between gap-1.5 mb-3">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest border ${
-                          p.category === 'Liquor' ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200/40' :
-                          p.category === 'Wine' ? 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200/40' :
-                          p.category === 'Beer' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200/40' :
-                          'bg-zinc-150 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200/60'
-                        }`}>
-                          {p.category}
-                        </span>
-
-                        {p.age_restricted && (
-                          <span 
-                            className="text-[9px] select-none shrink-0 bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded border border-red-500/15 font-mono font-bold uppercase tracking-wider"
-                            title="21+ Compliance Age Lock Active"
-                          >
-                            🔞 21+
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Image block */}
-                      <div className="h-32 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-850/60 overflow-hidden flex items-center justify-center mb-3 relative select-none">
+                      {/* Media Block */}
+                      <div className="w-12 h-12 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-850/60 overflow-hidden flex items-center justify-center shrink-0 select-none">
                         {p.imageUrl ? (
                           <img 
                             src={p.imageUrl} 
@@ -744,72 +1089,89 @@ export default function Inventory({
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
                           />
                         ) : (
-                          <Package className="h-10 w-10 text-zinc-300 dark:text-zinc-700 stroke-[1.25]" />
+                          <Package className="h-5 w-5 text-zinc-300 dark:text-zinc-700 stroke-[1.5]" />
                         )}
-
-                        {/* Quick stock overlay badge */}
-                        <div className="absolute bottom-2.5 left-2.5">
-                          <span className={`px-2 py-0.5 rounded text-[8px] font-mono uppercase tracking-widest font-black shadow-sm border ${
-                            stockStatus === 'out' ? 'bg-red-500 text-white border-transparent' :
-                            stockStatus === 'low' ? 'bg-amber-500 text-white border-transparent' :
-                            'bg-emerald-500 text-white border-transparent'
-                          }`}>
-                            {stockStatus === 'out' ? 'Out of Stock' : stockStatus === 'low' ? 'Low Stock' : 'In Stock'}
-                          </span>
-                        </div>
                       </div>
 
-                      {/* Title */}
-                      <div className="flex-1 mb-3">
-                        <h3 className="font-serif italic font-semibold text-zinc-900 dark:text-white text-xs line-clamp-2 leading-snug group-hover:text-[#d97706] transition-colors">
+                      {/* Name & Title */}
+                      <div className="flex-1 min-w-0 pl-0 lg:pl-4">
+                        <h3 className="font-serif italic font-semibold text-zinc-900 dark:text-white text-sm truncate group-hover:text-[#d97706] transition-colors leading-snug">
                           {p.name}
                         </h3>
-                        
-                        {/* ID & UPC Barcode details */}
-                        <div className="mt-2 space-y-0.5 text-[9px] font-mono text-zinc-400 dark:text-zinc-500">
-                          {p.distributor_sku && (
-                            <div className="flex justify-between">
-                              <span>SKU:</span>
-                              <span className="font-semibold text-zinc-650 dark:text-zinc-300">{p.distributor_sku}</span>
-                            </div>
-                          )}
-                          {p.barcode && (
-                            <div className="flex justify-between">
-                              <span>Barcode:</span>
-                              <span className="text-zinc-650 dark:text-zinc-350">{p.barcode}</span>
-                            </div>
-                          )}
-                          {p.vendor && (
-                            <div className="flex justify-between max-w-full truncate">
-                              <span>Vendor:</span>
-                              <span className="text-zinc-600 dark:text-zinc-400 font-sans font-medium max-w-[120px] truncate">{p.vendor}</span>
-                            </div>
+                        <div className="flex items-center gap-1.5 mt-1 lg:hidden">
+                          <span className={`px-2 py-0.2 rounded-full text-[8px] font-extrabold uppercase tracking-widest border ${
+                            p.category === 'Liquor' ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200/40' :
+                            p.category === 'Wine' ? 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200/40' :
+                            p.category === 'Beer' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200/40' :
+                            'bg-zinc-150 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200/60'
+                          }`}>
+                            {p.category}
+                          </span>
+                          {p.age_restricted && (
+                            <span className="text-[8px] shrink-0 bg-red-500/10 text-red-500 px-1 py-0.2 rounded border border-red-500/15 font-mono font-bold uppercase tracking-wider">
+                              🔞 21+
+                            </span>
                           )}
                         </div>
                       </div>
 
-                      {/* Footer: Price vs Inventory */}
-                      <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800 flex items-end justify-between">
-                        <div>
-                          <p className="text-[8px] font-mono uppercase text-zinc-400 font-bold">Price</p>
-                          <p className="font-mono text-xs font-black text-zinc-900 dark:text-white mt-0.5">
-                            ${p.price_per_bottle.toFixed(2)}
-                          </p>
-                        </div>
+                      {/* Category (Hidden on mobile) */}
+                      <div className="hidden lg:block w-24 shrink-0 text-left">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest border ${
+                          p.category === 'Liquor' ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200/40' :
+                          p.category === 'Wine' ? 'bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200/40' :
+                          p.category === 'Beer' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200/40' :
+                          'bg-zinc-150 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200/60'
+                        }`}>
+                          {p.category}
+                        </span>
+                      </div>
 
-                        <div className="text-right">
-                          <p className="text-[8px] font-mono uppercase text-zinc-400 font-bold">Stock</p>
-                          <p className={`font-mono font-black text-xs mt-0.5 ${
+                      {/* SKU */}
+                      <div className="w-full lg:w-32 shrink-0 text-left font-mono text-[10px] text-zinc-500 dark:text-zinc-400 flex lg:block justify-between items-center">
+                        <span className="lg:hidden text-zinc-400 font-sans">SKU:</span>
+                        <span className="font-semibold text-zinc-650 dark:text-zinc-300">{p.distributor_sku || 'N/A'}</span>
+                      </div>
+
+                      {/* Barcode */}
+                      <div className="w-full lg:w-32 shrink-0 text-left font-mono text-[10px] text-zinc-500 dark:text-zinc-400 flex lg:block justify-between items-center">
+                        <span className="lg:hidden text-zinc-400 font-sans">Barcode:</span>
+                        <span className="text-zinc-650 dark:text-zinc-350">{p.barcode || 'N/A'}</span>
+                      </div>
+
+                      {/* Price */}
+                      <div className="w-full lg:w-24 shrink-0 lg:text-right font-mono text-xs font-black text-zinc-900 dark:text-white flex lg:block justify-between items-center">
+                        <span className="lg:hidden text-zinc-400 font-sans font-normal text-[10px]">Price:</span>
+                        <span>${p.price_per_bottle.toFixed(2)}</span>
+                      </div>
+
+                      {/* Stock */}
+                      <div className="w-full lg:w-24 shrink-0 lg:text-right font-mono text-xs flex lg:block justify-between items-center">
+                        <span className="lg:hidden text-zinc-400 font-sans text-[10px]">Stock:</span>
+                        <div>
+                          <span className={`font-black ${
                             stockStatus === 'out' ? 'text-red-500' :
                             stockStatus === 'low' ? 'text-amber-500' :
                             'text-emerald-500'
                           }`}>
                             {p.inventory_bottles} Bts
-                          </p>
-                          <p className="text-[8px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-mono">
+                          </span>
+                          <span className="text-[9px] text-zinc-400 dark:text-zinc-500 ml-1 font-mono">
                             ({Math.floor(p.inventory_bottles / p.bottles_per_case)} Cs)
-                          </p>
+                          </span>
                         </div>
+                      </div>
+
+                      {/* Status Badge */}
+                      <div className="w-full lg:w-28 shrink-0 lg:text-right flex lg:block justify-between items-center">
+                        <span className="lg:hidden text-zinc-400 font-sans text-[10px]">Status:</span>
+                        <span className={`px-2.5 py-0.5 rounded text-[8px] font-mono uppercase tracking-widest font-black shadow-xs border ${
+                          stockStatus === 'out' ? 'bg-red-500/10 text-red-500 border-red-500/15' :
+                          stockStatus === 'low' ? 'bg-amber-500/10 text-[#d97706] border-[#d97706]/15' :
+                          'bg-emerald-500/10 text-emerald-500 border-emerald-500/15'
+                        }`}>
+                          {stockStatus === 'out' ? 'Out of Stock' : stockStatus === 'low' ? 'Low Stock' : 'In Stock'}
+                        </span>
                       </div>
 
                     </div>
@@ -819,257 +1181,6 @@ export default function Inventory({
             )}
           </div>
         </div>
-
-        {/* ACTIVE RECORD SPLIT DETAIL PANEL (Shopify/Odoo Style) */}
-        {selectedProduct && (
-          <div className="w-[420px] xl:w-[450px] bg-white dark:bg-[#111113] border border-zinc-200/80 dark:border-zinc-800 rounded-2xl flex flex-col shadow-[0_2px_12px_rgba(0,0,0,0.02)] overflow-hidden shrink-0 h-full animate-fade-in">
-            
-            {/* Drawer Header */}
-            <div className="p-5 border-b border-zinc-200/80 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] flex items-start justify-between">
-              <div className="space-y-1.5 pr-4 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[8px] uppercase bg-amber-500/10 text-[#d97706] border border-amber-500/20 px-2 py-0.5 rounded font-black tracking-widest">
-                    Active Record Specs
-                  </span>
-                  <span className="font-mono text-[9px] text-zinc-400">
-                    ID: {selectedProduct.id}
-                  </span>
-                </div>
-                
-                <h3 className="font-serif italic font-semibold text-lg text-zinc-950 dark:text-white leading-tight">
-                  {selectedProduct.name}
-                </h3>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {!isEditingRecord ? (
-                  <button
-                    onClick={handleStartEditRecord}
-                    disabled={isReadOnly}
-                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-200 px-2.5 py-1.5 rounded-lg text-[9px] font-mono font-bold uppercase hover:border-[#1a1a1a] dark:hover:border-white transition shadow-sm cursor-pointer flex items-center gap-1 disabled:opacity-40"
-                  >
-                    <Save className="h-3 w-3 text-zinc-400" />
-                    Edit Specs
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setIsEditingRecord(false)}
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-[10px] font-mono uppercase font-bold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                )}
-                
-                <button
-                  onClick={() => setSelectedProductId(null)}
-                  className="p-1 rounded-lg hover:bg-zinc-150 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Scrollable specs & timelines */}
-            <div className="flex-1 overflow-y-auto divide-y divide-zinc-150 dark:divide-zinc-800">
-              
-              {/* Product Specifications Section */}
-              <div className="p-5">
-                {!isEditingRecord ? (
-                  /* Read Mode */
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-5 text-xs">
-                    <div>
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Retail Bottle Price</p>
-                      <p className="font-bold text-sm text-zinc-900 dark:text-white mt-1 font-mono">${selectedProduct.price_per_bottle.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Wholesale Unit Cost</p>
-                      <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
-                        {selectedProduct.cost_per_unit ? `$${selectedProduct.cost_per_unit.toFixed(2)}` : 'Not Configured'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Primary Distributor</p>
-                      <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1">{selectedProduct.vendor || 'No vendor linked'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Distributor SKU</p>
-                      <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1 font-mono">{selectedProduct.distributor_sku || 'No SKU code'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Age Compliance</p>
-                      <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1 flex items-center gap-1">
-                        {selectedProduct.age_restricted ? '🔞 21+ Age Verification Gate' : 'Unrestricted General'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">Pack Ratio (bts/cs)</p>
-                      <p className="font-semibold text-zinc-700 dark:text-zinc-300 mt-1 font-mono">{selectedProduct.bottles_per_case} Bottles / Case</p>
-                    </div>
-                    <div className="col-span-2 pt-1.5 border-t border-zinc-100 dark:border-zinc-800">
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold mb-1">Stock on hand inventory</p>
-                      <div className="flex items-center gap-4 py-2 px-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl">
-                        <div className="font-mono tabular-nums">
-                          <span className="text-zinc-900 dark:text-white font-extrabold text-sm">{selectedProduct.inventory_bottles}</span>
-                          <span className="text-zinc-400 text-[9px] ml-1">total bottles</span>
-                        </div>
-                        <div className="text-zinc-300 dark:text-zinc-700">|</div>
-                        <div className="font-mono tabular-nums">
-                          <span className="text-zinc-900 dark:text-white font-bold text-sm">
-                            {Math.floor(selectedProduct.inventory_bottles / selectedProduct.bottles_per_case)}
-                          </span>
-                          <span className="text-zinc-400 text-[9px] ml-1">cases ({selectedProduct.bottles_per_case} pack)</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Edit Mode Specs */
-                  <form onSubmit={handleSaveProductEdit} className="space-y-4 text-xs">
-                    <div>
-                      <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Product Title</label>
-                      <input
-                        type="text"
-                        value={editFormData.name}
-                        onChange={(e) => setEditFormData(p => ({ ...p, name: e.target.value }))}
-                        className="w-full bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 p-2 text-xs focus:outline-none focus:border-[#d97706] text-zinc-900 dark:text-white"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Retail Price ($)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editFormData.price_per_bottle}
-                          onChange={(e) => setEditFormData(p => ({ ...p, price_per_bottle: parseFloat(e.target.value) || 0 }))}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 p-2 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor Cost ($)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editFormData.cost_per_unit}
-                          onChange={(e) => setEditFormData(p => ({ ...p, cost_per_unit: parseFloat(e.target.value) || 0 }))}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 p-2 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Distributor SKU</label>
-                        <input
-                          type="text"
-                          value={editFormData.distributor_sku}
-                          onChange={(e) => setEditFormData(p => ({ ...p, distributor_sku: e.target.value }))}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 p-2 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono font-bold uppercase text-zinc-400 mb-1">Vendor Name</label>
-                        <input
-                          type="text"
-                          value={editFormData.vendor}
-                          onChange={(e) => setEditFormData(p => ({ ...p, vendor: e.target.value }))}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 p-2 text-xs text-zinc-900 dark:text-white focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 py-2.5 font-mono font-bold border border-transparent uppercase tracking-widest text-[10px] hover:bg-[#d97706] hover:text-white dark:hover:bg-[#d97706] dark:hover:text-white transition cursor-pointer rounded-xl"
-                    >
-                      Save Specifications
-                    </button>
-                  </form>
-                )}
-              </div>
-
-              {/* Odoo Audit Chatter Stream Section */}
-              <div className="p-5 space-y-5">
-                <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-4.5 w-4.5 text-[#d97706]" />
-                    <span className="font-serif italic font-semibold text-sm text-zinc-950 dark:text-white">Record Chatter Timeline</span>
-                  </div>
-                  <span className="text-[9px] font-mono font-bold text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
-                    {selectedProduct.chatter?.length || 0} Events
-                  </span>
-                </div>
-
-                {/* Post New Note Form */}
-                <form onSubmit={handlePostChatterComment} className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Type staff log, verification or supplier note..."
-                    value={chatterComment}
-                    onChange={(e) => setChatterComment(e.target.value)}
-                    className="flex-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-850 dark:text-zinc-200 focus:outline-none focus:border-[#d97706] placeholder-zinc-400 dark:placeholder-zinc-500 font-sans"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isPostingComment || !chatterComment.trim()}
-                    className="bg-zinc-950 dark:bg-white hover:bg-[#d97706] dark:hover:bg-[#d97706] text-white dark:text-zinc-950 hover:text-white dark:hover:text-white px-4 py-2.5 rounded-xl font-mono text-[9px] font-bold uppercase transition shrink-0 cursor-pointer disabled:opacity-40"
-                  >
-                    Post Note
-                  </button>
-                </form>
-
-                {/* Chatter History */}
-                <div className="space-y-4 max-h-[250px] overflow-y-auto pr-1">
-                  {(!selectedProduct.chatter || selectedProduct.chatter.length === 0) ? (
-                    <div className="text-center py-6 text-zinc-400 text-[9px] font-mono uppercase tracking-widest bg-zinc-50/50 dark:bg-[#121212]/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
-                      No audited actions logged yet.
-                    </div>
-                  ) : (
-                    [...selectedProduct.chatter].reverse().map((cht) => {
-                      let actionColor = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500';
-                      let icon = <Clock className="h-3 w-3" />;
-
-                      if (cht.action === 'created') {
-                        actionColor = 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400';
-                        icon = <Check className="h-3 w-3" />;
-                      } else if (cht.action === 'update') {
-                        actionColor = 'bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400';
-                        icon = <Save className="h-3 w-3" />;
-                      } else if (cht.action === 'inventory_received') {
-                        actionColor = 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400';
-                        icon = <Layers className="h-3 w-3" />;
-                      } else if (cht.action === 'sale_deducted') {
-                        actionColor = 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400';
-                        icon = <ShoppingBag className="h-3 w-3" />;
-                      } else if (cht.action === 'comment') {
-                        actionColor = 'bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400';
-                        icon = <MessageSquare className="h-3 w-3" />;
-                      }
-
-                      return (
-                        <div key={cht.id} className="flex gap-3 text-xs leading-normal">
-                          <div className={`h-6 w-6 rounded-full ${actionColor} flex items-center justify-center shrink-0 mt-0.5`}>
-                            {icon}
-                          </div>
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center justify-between text-[9px]">
-                              <span className="font-bold text-zinc-850 dark:text-white">{cht.user}</span>
-                              <span className="text-zinc-400 font-mono">
-                                {new Date(cht.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed text-[11px]">
-                              {cht.detail}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* MODAL 1: ADD / CATALOG NEW PRODUCT */}
