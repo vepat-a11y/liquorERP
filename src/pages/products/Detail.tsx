@@ -57,7 +57,9 @@ export default function ProductDetail() {
     const keys: (keyof Product)[] = [
       'name', 'category', 'description', 'imageUrl', 'age_restricted',
       'distributor_sku', 'barcode', 'bottles_per_case', 'price_per_bottle',
-      'cost_per_unit', 'vendor', 'inventory_bottles'
+      'cost_per_unit', 'vendor', 'inventory_bottles',
+      'case_count', 'loose_bottle_count', 'cost_per_case', 'abv_percentage',
+      'vintage_year', 'liquor_category', 'deposit_fee', 'upc_barcode'
     ];
 
     return keys.some(key => {
@@ -80,10 +82,22 @@ export default function ProductDetail() {
     if (!draft || !canEdit) return;
     setIsSaving(true);
     try {
-      // Calculate inventory_cases based on updated bottles_per_case and inventory_bottles
+      // Re-calculate derived fields
+      const calculatedTotal = (Number(draft.case_count || 0) * Number(draft.bottles_per_case || 12)) + Number(draft.loose_bottle_count || 0);
+      const calculatedCostPerUnit = draft.bottles_per_case > 0 ? (Number(draft.cost_per_case || 0) / Number(draft.bottles_per_case)) : Number(draft.cost_per_unit || 0);
+      const calculatedMargin = draft.price_per_bottle > 0 ? (((draft.price_per_bottle - calculatedCostPerUnit) / draft.price_per_bottle) * 100) : 0;
+
       const finalDraft = {
         ...draft,
-        inventory_cases: Math.floor(draft.inventory_bottles / draft.bottles_per_case)
+        inventory_bottles: calculatedTotal,
+        total_bottles_calculated: calculatedTotal,
+        inventory_cases: Number(draft.case_count || 0),
+        cost_per_unit: calculatedCostPerUnit,
+        margin_percentage: Number(calculatedMargin.toFixed(2)),
+        // keep old & new fields synced
+        price_per_bottle: draft.price_per_bottle,
+        barcode: draft.upc_barcode || draft.barcode,
+        category: draft.liquor_category || draft.category
       };
 
       const res = await fetch(`/api/products/${product.id}?tenant_id=${context.activeTenantId}`, {
@@ -224,16 +238,72 @@ export default function ProductDetail() {
                 </div>
               </Card>
 
+              {/* Advanced Beverage Attributes */}
+              <Card title="Advanced Beverage Attributes">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Alcohol By Volume (ABV %)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={draft.abv_percentage || 0}
+                        onChange={(e) => setDraft({ ...draft, abv_percentage: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3.5 py-2 pl-7 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
+                        placeholder="e.g. 40.0"
+                      />
+                      <span className="absolute left-2.5 top-2.5 text-xs text-zinc-400 font-bold font-sans">%</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Vintage Year (Wine / Spirits)</label>
+                    <input
+                      type="number"
+                      value={draft.vintage_year || ''}
+                      onChange={(e) => setDraft({ ...draft, vintage_year: parseInt(e.target.value) || undefined })}
+                      className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
+                      placeholder="e.g. 2018 or leave blank"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Liquor Sub-category Class</label>
+                    <select
+                      value={draft.liquor_category || draft.category}
+                      onChange={(e) => setDraft({ ...draft, liquor_category: e.target.value as any, category: e.target.value as any })}
+                      className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition cursor-pointer font-sans"
+                    >
+                      <option value="Liquor">Liquor (Spirits/Gin/Vodka)</option>
+                      <option value="Wine">Wine (Red/White/Bordeaux)</option>
+                      <option value="Beer">Beer (Lagers/Ales/Cider)</option>
+                      <option value="Extras">Extras (Glassware/Mixers)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">UPC Universal Barcode Code</label>
+                    <input
+                      type="text"
+                      value={draft.upc_barcode || draft.barcode || ''}
+                      onChange={(e) => setDraft({ ...draft, upc_barcode: e.target.value, barcode: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
+                      placeholder="e.g. 071008291041"
+                    />
+                  </div>
+                </div>
+              </Card>
+
               {/* Pricing & Stock (Variants Card) */}
               <Card title="Pricing & Inventory Specs">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-850">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Retail Price ($) *</label>
                     <div className="relative">
                       <input
                         type="number"
                         step="0.01"
-                        value={draft.price_per_bottle}
+                        value={draft.price_per_bottle || 0}
                         onChange={(e) => setDraft({ ...draft, price_per_bottle: parseFloat(e.target.value) || 0 })}
                         className="w-full px-3.5 py-2 pl-7 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
                         required
@@ -243,13 +313,21 @@ export default function ProductDetail() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Wholesale Cost ($)</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Cost per Case ($)</label>
                     <div className="relative">
                       <input
                         type="number"
                         step="0.01"
-                        value={draft.cost_per_unit || 0}
-                        onChange={(e) => setDraft({ ...draft, cost_per_unit: parseFloat(e.target.value) || 0 })}
+                        value={draft.cost_per_case || 0}
+                        onChange={(e) => {
+                          const costCase = parseFloat(e.target.value) || 0;
+                          const calculatedUnit = draft.bottles_per_case > 0 ? (costCase / draft.bottles_per_case) : 0;
+                          setDraft({ 
+                            ...draft, 
+                            cost_per_case: costCase,
+                            cost_per_unit: Number(calculatedUnit.toFixed(2))
+                          });
+                        }}
                         className="w-full px-3.5 py-2 pl-7 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
                       />
                       <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
@@ -257,43 +335,97 @@ export default function ProductDetail() {
                   </div>
 
                   <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Bottles per Case</label>
+                    <input
+                      type="number"
+                      value={draft.bottles_per_case || 12}
+                      onChange={(e) => {
+                        const bpc = parseInt(e.target.value) || 12;
+                        const calculatedUnit = bpc > 0 ? ((draft.cost_per_case || 0) / bpc) : 0;
+                        setDraft({ 
+                          ...draft, 
+                          bottles_per_case: bpc,
+                          cost_per_unit: Number(calculatedUnit.toFixed(2))
+                        });
+                      }}
+                      className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-b border-zinc-100 dark:border-zinc-850">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Cost per Unit ($)</label>
+                    <div className="px-3.5 py-2 bg-zinc-100 dark:bg-zinc-800 border border-transparent rounded-lg text-xs font-mono font-bold text-zinc-650 dark:text-zinc-350 select-none">
+                      ${(draft.cost_per_unit || 0).toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
                     <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Margin (%)</label>
                     <div className="px-3.5 py-2 bg-zinc-100 dark:bg-zinc-800 border border-transparent rounded-lg text-xs font-mono font-bold text-zinc-650 dark:text-zinc-350 select-none">
-                      {draft.price_per_bottle > 0 && draft.cost_per_unit
-                        ? `${(((draft.price_per_bottle - draft.cost_per_unit) / draft.price_per_bottle) * 100).toFixed(1)}%`
+                      {draft.price_per_bottle > 0 
+                        ? `${(((draft.price_per_bottle - (draft.cost_per_unit || 0)) / draft.price_per_bottle) * 100).toFixed(1)}%`
                         : '—'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Bottle Deposit Fee ($)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={draft.deposit_fee || 0}
+                        onChange={(e) => setDraft({ ...draft, deposit_fee: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3.5 py-2 pl-7 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
+                      />
+                      <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-zinc-100 dark:border-zinc-850 pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Current Stock (Bottles)</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={draft.inventory_bottles}
-                        onChange={(e) => setDraft({ ...draft, inventory_bottles: parseInt(e.target.value) || 0 })}
-                        className="w-full px-3.5 py-2 pl-7 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
-                      />
-                      <Package className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Bottles per wholesale Case</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Case Count Stock</label>
                     <input
                       type="number"
-                      value={draft.bottles_per_case}
-                      onChange={(e) => setDraft({ ...draft, bottles_per_case: parseInt(e.target.value) || 12 })}
+                      value={draft.case_count || 0}
+                      onChange={(e) => {
+                        const cases = parseInt(e.target.value) || 0;
+                        const total = (cases * (draft.bottles_per_case || 12)) + (draft.loose_bottle_count || 0);
+                        setDraft({
+                          ...draft,
+                          case_count: cases,
+                          inventory_bottles: total
+                        });
+                      }}
                       className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Calculated Cases</label>
-                    <div className="px-3.5 py-2 bg-zinc-100 dark:bg-zinc-800 border border-transparent rounded-lg text-xs font-mono font-bold text-zinc-650 dark:text-zinc-350 select-none">
-                      {Math.floor(draft.inventory_bottles / draft.bottles_per_case)} cases ({draft.inventory_bottles % draft.bottles_per_case} loose)
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Loose Bottle Stock</label>
+                    <input
+                      type="number"
+                      value={draft.loose_bottle_count || 0}
+                      onChange={(e) => {
+                        const loose = parseInt(e.target.value) || 0;
+                        const total = ((draft.case_count || 0) * (draft.bottles_per_case || 12)) + loose;
+                        setDraft({
+                          ...draft,
+                          loose_bottle_count: loose,
+                          inventory_bottles: total
+                        });
+                      }}
+                      className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:border-[#008060] transition font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Total Bottles</label>
+                    <div className="px-3.5 py-2 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/20 rounded-lg text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400 select-none">
+                      {draft.inventory_bottles || 0} bottles
                     </div>
                   </div>
                 </div>

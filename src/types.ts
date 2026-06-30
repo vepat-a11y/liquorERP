@@ -12,7 +12,8 @@ export interface User {
   clerkUserId: string;
   name: string;
   email: string;
-  role: 'admin' | 'cashier';
+  role: 'Admin' | 'Manager' | 'Cashier'; // Polaris standardized roles
+  status?: 'Active' | 'Inactive';
 }
 
 export interface ProductVariant {
@@ -39,21 +40,36 @@ export interface Product {
   id: string;
   tenant_id: string;
   name: string;
-  category: 'Wine' | 'Beer' | 'Liquor' | 'Extras';
+  category: 'Wine' | 'Beer' | 'Liquor' | 'Extras'; // Legacy compatibility
   description?: string;
   imageUrl?: string;
   age_restricted: boolean;
   distributor_sku?: string;
-  barcode?: string;
-  // Case info
-  bottles_per_case: number; // Default e.g. 12, 24, 1
-  inventory_cases: number; // calculated as floor(inventory_bottles / bottles_per_case)
-  inventory_bottles: number; // total individual bottles in stock
-  price_per_bottle: number;
-  price_per_case?: number; // optional, case-break discount price
-  cost_per_unit?: number; // cost of the product / wholesale cost
-  vendor?: string; // Vendor name / distributor info
-  variants?: ProductVariant[];
+  barcode?: string; // Legacy compatibility
+  
+  // High-fidelity Polaris fields
+  case_count: number; // integer count of cases
+  bottles_per_case: number; // integer bottles per case
+  loose_bottle_count: number; // integer loose bottles in inventory
+  total_bottles_calculated: number; // computed: (case_count * bottles_per_case) + loose_bottle_count
+  
+  cost_per_case: number; // decimal cost per case
+  cost_per_unit: number; // computed: cost_per_case / bottles_per_case
+  retail_price: number; // decimal price per bottle
+  margin_percentage: number; // computed: ((retail_price - cost_per_unit) / retail_price) * 100
+  
+  abv_percentage: number; // decimal ABV percentage (e.g. 40.0)
+  vintage_year: string | null; // e.g. "2018", null
+  liquor_category: 'Spirits' | 'Wine' | 'Beer' | 'Extras';
+  deposit_fee: number; // e.g. CRV breakage fee / environmental deposit
+  upc_barcode: string; // unique scan code
+
+  // Backward compatibility fields
+  inventory_cases: number; // floor(inventory_bottles / bottles_per_case)
+  inventory_bottles: number; // total bottles in stock
+  price_per_bottle: number; // maps to retail_price
+  price_per_case?: number;
+  vendor?: string; // distributor
   createdAt: string;
   chatter?: ChatterMessage[];
 }
@@ -61,10 +77,21 @@ export interface Product {
 export interface Customer {
   id: string;
   tenant_id: string;
-  name: string;
+  name: string; // legacy: Combined first and last name
   email: string;
-  phone: string;
-  dob?: string; // for age check lookup
+  phone: string; // legacy: phone number
+  dob?: string; // legacy: date of birth
+
+  // Polaris expanded fields
+  loyalty_id: string; // unique loyalty ID
+  first_name: string;
+  last_name: string;
+  phone_number: string;
+  date_of_birth: string;
+  total_lifetime_spend: number;
+  store_credit_balance: number;
+  wholesale_tier: 'Retail Standard' | 'Tier-2 Bar/Restaurant Bulk Account';
+
   createdAt: string;
   chatter?: ChatterMessage[];
 }
@@ -84,18 +111,29 @@ export interface TransactionItem {
 export interface Transaction {
   id: string;
   tenant_id: string;
-  customer_id?: string;
+  customer_id?: string | null;
   customer_name?: string;
   items: TransactionItem[];
   subtotal: number;
   discount_total: number;
   tax: number;
   total: number;
-  payment_method: 'Cash' | 'Card' | 'Tap-to-Pay';
-  age_verified_at?: string; // timestamp of DOB check
-  age_verified_dob?: string; // scanned/input DOB
-  cashier_id: string;
+  payment_method: 'Cash' | 'Card' | 'Split' | 'House Account'; // Card includes previous 'Tap-to-Pay'
+  
+  // State-level compliance logging
+  order_number: string; // e.g. #1001
+  cashier_user_id: string; // UUID/id of cashier
   cashier_name: string;
+  age_verified: boolean;
+  verification_method: 'Scanned ID' | 'Manual DOB Input' | 'None';
+  birth_date_logged: string | null;
+  compliance_timestamp: string | null;
+  
+  category_discounts_applied: number;
+  promo_coupons_applied: number;
+  tax_accrued: number;
+  grand_total: number;
+
   createdAt: string;
 }
 
@@ -123,3 +161,20 @@ export interface DeliveryOrder {
   createdAt: string;
 }
 
+// Procurement Purchase Order interfaces
+export interface PurchaseOrderItem {
+  product_id: string;
+  product_name: string;
+  ordered_cases: number;
+  received_cases: number;
+  unit_cost_contracted: number;
+}
+
+export interface PurchaseOrder {
+  id: string; // e.g. po_1234
+  purchase_order_number: string; // e.g. PO-4921
+  vendor_name: string; // e.g. Southern Glazer's Wine & Spirits
+  po_status: 'Draft' | 'Sent' | 'Partially Received' | 'Fully Received';
+  items: PurchaseOrderItem[];
+  createdAt: string;
+}

@@ -308,6 +308,60 @@ async function startServer() {
     }
   });
 
+  // API 10: Store Profile Settings
+  app.get("/api/settings/profile", (req, res) => {
+    try {
+      res.json(dbStore.getStoreProfile());
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/settings/profile", (req, res) => {
+    try {
+      const updated = dbStore.saveStoreProfile(req.body);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API 11: Compliance & Tax Laws Settings
+  app.get("/api/settings/compliance", (req, res) => {
+    try {
+      res.json(dbStore.getComplianceSettings());
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/settings/compliance", (req, res) => {
+    try {
+      const updated = dbStore.saveComplianceSettings(req.body);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API 12: Hardware Configuration Settings
+  app.get("/api/settings/hardware", (req, res) => {
+    try {
+      res.json(dbStore.getHardwareSettings());
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/settings/hardware", (req, res) => {
+    try {
+      const updated = dbStore.saveHardwareSettings(req.body);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Mount Vite middleware in development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

@@ -181,7 +181,7 @@ export default function History({
   const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0);
 
   // Age verification success rate
-  const ageRestrictedTxCount = transactions.filter(t => t.age_verified_at).length;
+  const ageRestrictedTxCount = transactions.filter(t => t.age_verified).length;
   const complianceScore = transactions.length > 0 ? (ageRestrictedTxCount / transactions.length) * 100 : 100;
 
   return (
@@ -248,10 +248,10 @@ export default function History({
                       <span className="font-bold text-[#09090b] dark:text-white text-sm ml-1">{t.customer_name || 'Walk-in Customer'}</span>
                     </div>
 
-                    {t.age_verified_at ? (
+                    {t.age_verified ? (
                       <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider">
                         <ShieldCheck className="h-3.5 w-3.5" />
-                        <span>ID Verified ({t.age_verified_dob})</span>
+                        <span>ID Verified ({t.birth_date_logged || 'Age Checked'})</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 text-zinc-400 bg-[#fafafa] dark:bg-[#09090b] px-2 py-0.5 rounded text-[9px] font-mono border border-zinc-200 dark:border-zinc-800">
