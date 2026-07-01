@@ -48,6 +48,48 @@ export default function Register({
   const [editingCartIdx, setEditingCartIdx] = useState<number | null>(null);
   const [manualPriceInput, setManualPriceInput] = useState('');
   const [manualDiscountPercentInput, setManualDiscountPercentInput] = useState('');
+  const [activeKeypadField, setActiveKeypadField] = useState<'price' | 'discount'>('price');
+
+  const handleKeypadInput = (val: string) => {
+    if (activeKeypadField === 'price') {
+      if (val === '.' && manualPriceInput.includes('.')) return;
+      setManualPriceInput(prev => {
+        if ((prev === '0' || prev === '0.00' || prev === '') && val !== '.') {
+          return val;
+        }
+        return prev + val;
+      });
+    } else {
+      if (val === '.' && manualDiscountPercentInput.includes('.')) return;
+      setManualDiscountPercentInput(prev => {
+        if ((prev === '0' || prev === '') && val !== '.') {
+          return val;
+        }
+        const next = prev + val;
+        const parsed = parseFloat(next);
+        if (!isNaN(parsed) && parsed > 100) {
+          return '100';
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleKeypadClear = () => {
+    if (activeKeypadField === 'price') {
+      setManualPriceInput('');
+    } else {
+      setManualDiscountPercentInput('');
+    }
+  };
+
+  const handleKeypadBackspace = () => {
+    if (activeKeypadField === 'price') {
+      setManualPriceInput(prev => prev.slice(0, -1));
+    } else {
+      setManualDiscountPercentInput(prev => prev.slice(0, -1));
+    }
+  };
   
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [customItem, setCustomItem] = useState({
@@ -234,6 +276,7 @@ export default function Register({
 
     setManualPriceInput(item.priceOverride !== undefined ? item.priceOverride.toString() : defaultPrice.toFixed(2));
     setManualDiscountPercentInput(item.discountPercentOverride !== undefined ? item.discountPercentOverride.toString() : '');
+    setActiveKeypadField('price');
   };
 
   // Save manual overrides
@@ -868,10 +911,10 @@ export default function Register({
 
                     {/* Inline Editor Form */}
                     {isCurrentlyEditing && (
-                      <div className="bg-zinc-50 dark:bg-[#121212] p-2.5 border border-zinc-200 dark:border-zinc-800 rounded space-y-2 mt-1">
+                      <div className="bg-zinc-50 dark:bg-[#121212] p-2.5 border border-zinc-200 dark:border-zinc-800 rounded space-y-2 mt-1 animate-fadeIn">
                         <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-850">
                           <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-zinc-500">Line Override Adjuster</span>
-                          <button type="button" onClick={() => setEditingCartIdx(null)} className="text-zinc-400 hover:text-red-500">
+                          <button type="button" onClick={() => setEditingCartIdx(null)} className="text-zinc-400 hover:text-red-500 cursor-pointer">
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -879,31 +922,89 @@ export default function Register({
                           <div>
                             <label className="text-[9px] block text-zinc-500 mb-0.5 font-bold uppercase">Unit Price ($)</label>
                             <input
-                              type="number"
-                              step="0.01"
+                              type="text"
                               value={manualPriceInput}
+                              onFocus={() => setActiveKeypadField('price')}
                               onChange={(e) => setManualPriceInput(e.target.value)}
-                              className="w-full bg-white dark:bg-[#1c1c1c] p-1.5 border border-zinc-200 dark:border-zinc-800 outline-none rounded focus:border-[#d97706]"
+                              className={`w-full bg-white dark:bg-[#1c1c1c] p-1.5 border outline-none rounded font-mono transition-all ${
+                                activeKeypadField === 'price' ? 'border-[#d97706] ring-2 ring-[#d97706]/10' : 'border-zinc-200 dark:border-zinc-800'
+                              }`}
                             />
                           </div>
                           <div>
                             <label className="text-[9px] block text-zinc-500 mb-0.5 font-bold uppercase">Discount (%)</label>
                             <input
-                              type="number"
-                              min="0"
-                              max="100"
+                              type="text"
                               placeholder="0 - 100"
                               value={manualDiscountPercentInput}
+                              onFocus={() => setActiveKeypadField('discount')}
                               onChange={(e) => setManualDiscountPercentInput(e.target.value)}
-                              className="w-full bg-white dark:bg-[#1c1c1c] p-1.5 border border-zinc-200 dark:border-zinc-800 outline-none rounded focus:border-[#d97706]"
+                              className={`w-full bg-white dark:bg-[#1c1c1c] p-1.5 border outline-none rounded font-mono transition-all ${
+                                activeKeypadField === 'discount' ? 'border-[#d97706] ring-2 ring-[#d97706]/10' : 'border-zinc-200 dark:border-zinc-800'
+                              }`}
                             />
                           </div>
                         </div>
+
+                        {/* Tactical POS Numerical Keypad */}
+                        <div className="bg-zinc-100 dark:bg-zinc-900 p-2 rounded border border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                          <div className="flex justify-between items-center text-[9px] font-mono uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-bold">
+                            <span>POS Tactile Keypad</span>
+                            <span className="text-[#d97706] dark:text-amber-400 font-extrabold uppercase">
+                              {activeKeypadField === 'price' ? 'Edit Price ($)' : 'Edit Discount (%)'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => handleKeypadInput(num.toString())}
+                                className="bg-white dark:bg-[#1c1c1c] hover:bg-zinc-50 dark:hover:bg-zinc-850 py-1.5 rounded text-xs font-bold font-mono text-zinc-800 dark:text-zinc-200 border border-zinc-250 dark:border-zinc-800 shadow-sm transition-all duration-100 active:scale-95 cursor-pointer"
+                              >
+                                {num}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={handleKeypadClear}
+                              className="bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 py-1.5 rounded text-xs font-bold font-mono border border-red-200/30 dark:border-red-900/30 transition-all duration-100 active:scale-95 cursor-pointer"
+                            >
+                              C
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleKeypadInput('0')}
+                              className="bg-white dark:bg-[#1c1c1c] hover:bg-zinc-50 dark:hover:bg-zinc-850 py-1.5 rounded text-xs font-bold font-mono text-zinc-800 dark:text-zinc-200 border border-zinc-250 dark:border-zinc-800 shadow-sm transition-all duration-100 active:scale-95 cursor-pointer"
+                            >
+                              0
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleKeypadInput('.')}
+                              className="bg-white dark:bg-[#1c1c1c] hover:bg-zinc-50 dark:hover:bg-zinc-850 py-1.5 rounded text-xs font-bold font-mono text-zinc-800 dark:text-zinc-200 border border-zinc-250 dark:border-zinc-800 shadow-sm transition-all duration-100 active:scale-95 cursor-pointer"
+                            >
+                              .
+                            </button>
+                          </div>
+                          
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              type="button"
+                              onClick={handleKeypadBackspace}
+                              className="w-full bg-zinc-250 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-300 py-1 rounded text-[9px] font-bold font-mono transition-all duration-100 active:scale-95 cursor-pointer uppercase"
+                            >
+                              ⌫ Backspace
+                            </button>
+                          </div>
+                        </div>
+
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={handleApplyOverrides}
-                            className="bg-[#1a1a1a] dark:bg-[#f8f7f4] text-white dark:text-[#1a1a1a] text-[10px] font-bold py-1 px-3 border border-transparent hover:border-[#1a1a1a] hover:bg-[#d97706] rounded font-mono transition"
+                            className="bg-[#1a1a1a] dark:bg-[#f8f7f4] text-white dark:text-[#1a1a1a] text-[10px] font-bold py-1.5 px-3 border border-transparent hover:border-[#1a1a1a] hover:bg-[#d97706] rounded font-mono transition"
                           >
                             Apply Adjust
                           </button>
